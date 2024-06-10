@@ -1,9 +1,15 @@
-# Vue 3 + TypeScript + Vite
+# Vibe Check
 
-This template should help get you started developing with Vue 3 and TypeScript in Vite. The template uses Vue 3 `<script setup>` SFCs, check out the [script setup docs](https://v3.vuejs.org/api/sfc-script-setup.html#sfc-script-setup) to learn more.
+Frontend for the EthCC Vibe check demo.
 
-## Recommended Setup
+### Development
 
--   [VS Code](https://code.visualstudio.com/) + [Vue - Official](https://marketplace.visualstudio.com/items?itemName=Vue.volar) (previously Volar) and disable Vetur
+```bash
+bun install
+bun run dev
+```
 
--   Use [vue-tsc](https://github.com/vuejs/language-tools/tree/master/packages/tsc) for performing the same type checking from the command line, or for generating d.ts files for SFCs.
+### Setup
+
+-   [VS Code](https://code.visualstudio.com/) + [Vue - Official](https://marketplace.visualstudio.com/items?itemName=Vue.volar)
+-   [Prettier](https://marketplace.visualstudio.com/items?itemName=esbenp.prettier-vscode)
