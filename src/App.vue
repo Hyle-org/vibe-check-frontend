@@ -15,25 +15,25 @@ const lastDetections = ref<faceApi.FaceDetection[]>([]);
 
 const status = ref<string>("capturing");
 
-onMounted(async () => {
-    await faceApi.nets.tinyFaceDetector.loadFromUri("/models");
-    navigator.mediaDevices
-        .getUserMedia({ video: true, audio: false })
-        .then(async (stream) => {
-            videoFeed.value!.srcObject = stream;
-            videoFeed.value!.play();
-            detectionTimer.value = setInterval(async () => {
-                const displaySize = { width: videoFeed.value!.clientWidth, height: videoFeed.value!.clientHeight }
-                faceApi.matchDimensions(canvasOutput.value!, displaySize)
-                lastDetections.value = await faceApi.detectAllFaces(videoFeed.value!, new faceApi.TinyFaceDetectorOptions())
-                const resizedDetections = faceApi.resizeResults(lastDetections.value, displaySize)
-                faceApi.draw.drawDetections(canvasOutput.value!, resizedDetections);
-            }, 1000);
-        })
-        .catch((err) => {
-            console.error(`An error occurred: ${err}`);
-        });
-});
+// onMounted(async () => {
+//     await faceApi.nets.tinyFaceDetector.loadFromUri("/models");
+//     navigator.mediaDevices
+//         .getUserMedia({ video: true, audio: false })
+//         .then(async (stream) => {
+//             videoFeed.value!.srcObject = stream;
+//             videoFeed.value!.play();
+//             detectionTimer.value = setInterval(async () => {
+//                 const displaySize = { width: videoFeed.value!.clientWidth, height: videoFeed.value!.clientHeight }
+//                 faceApi.matchDimensions(canvasOutput.value!, displaySize)
+//                 lastDetections.value = await faceApi.detectAllFaces(videoFeed.value!, new faceApi.TinyFaceDetectorOptions())
+//                 const resizedDetections = faceApi.resizeResults(lastDetections.value, displaySize)
+//                 faceApi.draw.drawDetections(canvasOutput.value!, resizedDetections);
+//             }, 1000);
+//         })
+//         .catch((err) => {
+//             console.error(`An error occurred: ${err}`);
+//         });
+// });
 
 const takeScreenshot = async () => {
     const canvas = screenshotOutput.value!;
@@ -92,6 +92,84 @@ const prepareTx = () => {
     // Prepare the transaction
 }
 
+const buf2hex = (buffer) => {
+  return [...new Uint8Array(buffer)]
+      .map(x => x.toString(16).padStart(2, '0'))
+      .join('');
+}
+
+let rawId;
+let publicKey_str;
+
+const webAuthnCreate = async () => {
+    const publicKey = {
+        attestation: "none",
+        authenticatorSelection: {
+            authenticatorAttachment: "cross-platform",
+            requireResidentKey: false,
+            residentKey: "discouraged",
+        },
+        challenge: Uint8Array.from("txHash", c => c.charCodeAt(0)),
+        pubKeyCredParams: [{ alg: -7, type: "public-key" }],
+        rp: { name: "Vibe Checker", id: "localhost" },
+        timeout: 600000,
+        user: { id: Uint8Array.from("myUserId", c => c.charCodeAt(0)), name: "jamiedoe", displayName: "Jamie Doe" },
+    };
+
+    let publicKeyCredential = await navigator.credentials.create({ publicKey: publicKey });
+    publicKey_str = buf2hex(publicKeyCredential.response.getPublicKey());
+    rawId = publicKeyCredential.rawId;
+    console.log(publicKeyCredential);
+    // console.log(publicKeyCredential.response.id);
+}
+
+const webAuthnGetwithId = async () => {
+    let temp = "q0hhp1Z0kDMQRBsRIeaX52bL9qXjb6D1_jcmfbWt3k5jbfVZawp19BW5oGz7MJuBi4LvQr-U6LM1Z1Pv-3NUGQ";
+    const getRequest = {
+        allowCredentials: [
+            { id: Uint8Array.from(temp, c => c.charCodeAt(0)), type: "public-key"}
+        ],
+        challenge: Uint8Array.from("txHash", c => c.charCodeAt(0)),
+        rpId: "localhost",
+        attestation: "none",
+        timeout: 600000,
+        userVerification: "discouraged",
+    };
+    navigator.credentials.get({ publicKey: getRequest })
+        .then(function (assertion) {
+            const signature = buf2hex(assertion.response.signature);
+            const authenticatorData = buf2hex(assertion.response.authenticatorData);
+            console.log(assertion.response);
+            console.log("pubkey = "+ publicKey_str);
+            console.log("signature = " + signature);
+            console.log("authenticatorData = " + authenticatorData);
+        }).catch(function (err) {
+            console.log(err);
+        });
+}
+
+const webAuthnGetwithoutId = async () => {
+    const getRequest = {
+        allowCredentials: [],
+        challenge: Uint8Array.from("txHash", c => c.charCodeAt(0)),
+        rpId: "localhost",
+        attestation: "none",
+        timeout: 600000,
+        userVerification: "discouraged",
+    };
+    navigator.credentials.get({ publicKey: getRequest })
+        .then(function (assertion) {
+            const signature = buf2hex(assertion.response.signature);
+            const authenticatorData = buf2hex(assertion.response.authenticatorData);
+            console.log(assertion.response);
+            console.log("pubkey = "+ publicKey_str);
+            console.log("signature = " + signature);
+            console.log("authenticatorData = " + authenticatorData);
+        }).catch(function (err) {
+            console.log(err);
+        });
+}
+
 const signAndSend = async () => {
     const tx = prepareTx()
     // Show relevant details to the user
@@ -120,7 +198,7 @@ const signAndSend = async () => {
         </template>
         <template v-else>
             <div class="flex justify-center">
-                <div :class="'rounded-xl overflow-hidden mirror relative ' + (!screenshotData ? '' : 'hidden')">
+                <!-- <div :class="'rounded-xl overflow-hidden mirror relative ' + (!screenshotData ? '' : 'hidden')">
                     <video ref="videoFeed" autoplay></video>
                     <canvas class="absolute top-0" ref="canvasOutput"></canvas>
                 </div>
@@ -129,13 +207,22 @@ const signAndSend = async () => {
                     <div class="absolute top-0 w-full h-full flex justify-center items-center">
                         <p class="text-white font-semibold">{{ fakeProcessingMessage }}</p>
                     </div>
-                </div>
+                </div> -->
             </div>
             <div v-if="status != 'success' && status != 'failed'" class="flex justify-center my-8">
                 <button @click="takeScreenshot">Claim token</button>
             </div>
             <div v-else class="flex justify-center my-8">
                 <button @click="signAndSend">Sign & send TX</button>
+            </div>
+            <div class="flex justify-center my-8">
+                <button @click="webAuthnCreate">webAuthnCreate</button>
+            </div>
+            <div class="flex justify-center my-8">
+                <button @click="webAuthnGetwithId">webAuthnGetwithId</button>
+            </div>
+            <div class="flex justify-center my-8">
+                <button @click="webAuthnGetwithoutId">webAuthnGetwithoutId</button>
             </div>
         </template>
     </div>
