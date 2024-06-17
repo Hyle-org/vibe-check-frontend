@@ -92,16 +92,37 @@ const prepareTx = () => {
     // Prepare the transaction
 }
 
-const buf2hex = (buffer) => {
-  return [...new Uint8Array(buffer)]
-      .map(x => x.toString(16).padStart(2, '0'))
-      .join('');
+function readAsn1IntegerSequence(input: Uint8Array) {
+    // https://www.w3.org/TR/webauthn-2/#sctn-signature-attestation-types
+    if (input[0] !== 0x30) throw new Error('Input is not an ASN.1 sequence');
+    const seqLength = input[1];
+    const elements : Uint8Array[] = [];
+
+
+    let current = input.slice(2, 2 + seqLength);
+    while (current.length > 0) {
+        const tag = current[0];
+        if (tag !== 0x02) throw new Error('Expected ASN.1 sequence element to be an INTEGER');
+
+
+        const elLength = current[1];
+        elements.push(current.slice(2, 2 + elLength));
+
+
+        current = current.slice(2 + elLength);
+    }
+
+    if (elements.length !== 2) throw new Error('Expected 2 ASN.1 sequence elements');
+    let [r, s] = elements;
+
+    return [r.buffer, s.buffer];
 }
 
-let rawId;
-let publicKey_str;
+// Challenge should be 32bytes long
+var challenge = Uint8Array.from("0123456789abcdef0123456789abcdef", c => c.charCodeAt(0));
 
-const webAuthnCreate = async () => {
+
+const webAuthn = async () => {
     const publicKey = {
         attestation: "none",
         authenticatorSelection: {
@@ -109,65 +130,57 @@ const webAuthnCreate = async () => {
             requireResidentKey: false,
             residentKey: "discouraged",
         },
-        challenge: Uint8Array.from("txHash", c => c.charCodeAt(0)),
+        challenge: challenge,
         pubKeyCredParams: [{ alg: -7, type: "public-key" }],
         rp: { name: "Vibe Checker", id: "localhost" },
         timeout: 600000,
         user: { id: Uint8Array.from("myUserId", c => c.charCodeAt(0)), name: "jamiedoe", displayName: "Jamie Doe" },
     };
 
-    let publicKeyCredential = await navigator.credentials.create({ publicKey: publicKey });
-    publicKey_str = buf2hex(publicKeyCredential.response.getPublicKey());
-    rawId = publicKeyCredential.rawId;
-    console.log(publicKeyCredential);
-    // console.log(publicKeyCredential.response.id);
-}
+    var publicKeyCredential = await navigator.credentials.create({ publicKey: publicKey });
+    var pubKey = publicKeyCredential.response.getPublicKey();
 
-const webAuthnGetwithId = async () => {
-    let temp = "q0hhp1Z0kDMQRBsRIeaX52bL9qXjb6D1_jcmfbWt3k5jbfVZawp19BW5oGz7MJuBi4LvQr-U6LM1Z1Pv-3NUGQ";
+    var x_buff = pubKey.slice(-64, -32);
+    var y_buff = pubKey.slice(-32);
+
     const getRequest = {
         allowCredentials: [
-            { id: Uint8Array.from(temp, c => c.charCodeAt(0)), type: "public-key"}
+            { id: publicKeyCredential.rawId, type: "public-key"}
         ],
-        challenge: Uint8Array.from("txHash", c => c.charCodeAt(0)),
+        challenge: challenge,
         rpId: "localhost",
         attestation: "none",
         timeout: 600000,
         userVerification: "discouraged",
     };
-    navigator.credentials.get({ publicKey: getRequest })
-        .then(function (assertion) {
-            const signature = buf2hex(assertion.response.signature);
-            const authenticatorData = buf2hex(assertion.response.authenticatorData);
-            console.log(assertion.response);
-            console.log("pubkey = "+ publicKey_str);
-            console.log("signature = " + signature);
-            console.log("authenticatorData = " + authenticatorData);
-        }).catch(function (err) {
-            console.log(err);
-        });
-}
+    
+    var assertion = await navigator.credentials.get({ publicKey: getRequest })
 
-const webAuthnGetwithoutId = async () => {
-    const getRequest = {
-        allowCredentials: [],
-        challenge: Uint8Array.from("txHash", c => c.charCodeAt(0)),
-        rpId: "localhost",
-        attestation: "none",
-        timeout: 600000,
-        userVerification: "discouraged",
-    };
-    navigator.credentials.get({ publicKey: getRequest })
-        .then(function (assertion) {
-            const signature = buf2hex(assertion.response.signature);
-            const authenticatorData = buf2hex(assertion.response.authenticatorData);
-            console.log(assertion.response);
-            console.log("pubkey = "+ publicKey_str);
-            console.log("signature = " + signature);
-            console.log("authenticatorData = " + authenticatorData);
-        }).catch(function (err) {
-            console.log(err);
-        });
+    var signature = new Uint8Array(assertion.response.signature);
+	var [r_buffer, s_buffer]= readAsn1IntegerSequence(new Uint8Array(signature));
+
+    var clientDataJSON = await assertion.response.clientDataJSON;
+    var authenticatorData = await assertion.response.authenticatorData;
+    // challenge is containted in the clientDataJSON: https://www.w3.org/TR/webauthn-2/#dictionary-client-data
+    // TODO: Should not be extracted from clietnDataJSON. Should be computed separatly
+    var extracted_challenge = clientDataJSON.slice(36,36+32);
+
+    console.log("authenticatorData = ", new Uint8Array(authenticatorData));
+    console.log("clientDataJSON = ", new Uint8Array(clientDataJSON));
+    console.log("clientDataJSON = ", clientDataJSON);
+    console.log("extracted_challenge = ", new Uint8Array(extracted_challenge));
+    console.log("signature = ", assertion.response.signature);
+    console.log("r = ", new Uint8Array(assertion.response.signature.slice(4, 36)));
+    console.log("s? = ", new Uint8Array(assertion.response.signature.slice(39, 71)));
+    console.log("signature_r = ", new Uint8Array(r_buffer));
+    console.log("signature_s = ", new Uint8Array(s_buffer));
+    console.log("x_buff = ", new Uint8Array(x_buff));
+    console.log("y_buff = ", new Uint8Array(y_buff));
+
+    // console.log("x = ", BigInt("0x" + buf2hex(x_buff), 16));
+    // console.log("y = ", BigInt("0x" + buf2hex(y_buff), 16));
+    // console.log("r = ", BigInt("0x" + buf2hex(r_buffer), 16));
+    // console.log("s = ", BigInt("0x" + buf2hex(s_buffer), 16));
 }
 
 const signAndSend = async () => {
@@ -216,13 +229,7 @@ const signAndSend = async () => {
                 <button @click="signAndSend">Sign & send TX</button>
             </div>
             <div class="flex justify-center my-8">
-                <button @click="webAuthnCreate">webAuthnCreate</button>
-            </div>
-            <div class="flex justify-center my-8">
-                <button @click="webAuthnGetwithId">webAuthnGetwithId</button>
-            </div>
-            <div class="flex justify-center my-8">
-                <button @click="webAuthnGetwithoutId">webAuthnGetwithoutId</button>
+                <button @click="webAuthn">webAuthn</button>
             </div>
         </template>
     </div>
