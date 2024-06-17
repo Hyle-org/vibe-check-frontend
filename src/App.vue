@@ -4,6 +4,8 @@ import { onMounted, ref } from "vue";
 import * as asn1js from "asn1js";
 import * as pkijs from "pkijs";
 
+import { broadcastTx, checkTxStatus, setupCosmos } from "./cosmos";
+
 // resize the overlay canvas to the input dimensions
 const canvasOutput = ref<HTMLCanvasElement | null>(null);
 const videoFeed = ref<HTMLVideoElement | null>(null);
@@ -38,6 +40,7 @@ onMounted(async () => {
 });
 
 const takeScreenshot = async () => {
+    clearInterval(detectionTimer.value as number);
     const canvas = screenshotOutput.value!;
     canvas.width = videoFeed.value!.videoWidth;
     canvas.height = videoFeed.value!.videoHeight;
@@ -91,43 +94,46 @@ const zoomInOnBox = (canvas, img, x, y, width, height, steps) => {
 }
 
 const prepareTx = () => {
-    // Prepare the transaction
+    return {
+        tx_bytes: "0x1234",
+        mode: "BROADCAST_MODE_SYNC",
+    };
 }
 
-function extractPublicKeyCoordinates(publicKeyInfo: ArrayBuffer): [ x: Uint8Array, y: Uint8Array ] {
-  const asn1 = asn1js.fromBER(publicKeyInfo);
-  if (asn1.offset === -1) {
-    throw new Error("PublicKey wrongly formatted");
-  }
+function extractPublicKeyCoordinates(publicKeyInfo: ArrayBuffer): [x: Uint8Array, y: Uint8Array] {
+    const asn1 = asn1js.fromBER(publicKeyInfo);
+    if (asn1.offset === -1) {
+        throw new Error("PublicKey wrongly formatted");
+    }
 
-  const spki = new pkijs.PublicKeyInfo({ schema: asn1.result });
+    const spki = new pkijs.PublicKeyInfo({ schema: asn1.result });
 
-  const subjectPublicKey = spki.subjectPublicKey.valueBlock.valueHex;
-  const keyData = new Uint8Array(subjectPublicKey);
+    const subjectPublicKey = spki.subjectPublicKey.valueBlock.valueHex;
+    const keyData = new Uint8Array(subjectPublicKey);
 
-  if (keyData[0] !== 0x04) {
-    throw new Error("PublicKey is not in expected format");
-  }
+    if (keyData[0] !== 0x04) {
+        throw new Error("PublicKey is not in expected format");
+    }
 
-  const x = keyData.slice(1, 33);
-  const y = keyData.slice(33, 65);
+    const x = keyData.slice(1, 33);
+    const y = keyData.slice(33, 65);
 
-  return [x, y];
+    return [x, y];
 }
 
 
 function mergeBuffer(buffer1: ArrayBuffer, buffer2: ArrayBuffer) {
-  const tmp = new Uint8Array(buffer1.byteLength + buffer2.byteLength);
-  tmp.set(new Uint8Array(buffer1), 0);
-  tmp.set(new Uint8Array(buffer2), buffer1.byteLength);
-  return tmp.buffer;
+    const tmp = new Uint8Array(buffer1.byteLength + buffer2.byteLength);
+    tmp.set(new Uint8Array(buffer1), 0);
+    tmp.set(new Uint8Array(buffer2), buffer1.byteLength);
+    return tmp.buffer;
 }
 
 function extractSignature(input: Uint8Array) {
     // https://www.w3.org/TR/webauthn-2/#sctn-signature-attestation-types
     if (input[0] !== 0x30) throw new Error('Input is not an ASN.1 sequence');
     const seqLength = input[1];
-    const elements : Uint8Array[] = [];
+    const elements: Uint8Array[] = [];
     let current = input.slice(2, 2 + seqLength);
     while (current.length > 0) {
         const tag = current[0];
@@ -143,20 +149,20 @@ function extractSignature(input: Uint8Array) {
     // If leading is 0 and modulo of length is 1 byte then
     // leading 0 is for two's complement and will be removed.
     if (r[0] === 0 && r.byteLength % 16 == 1) {
-    r = r.slice(1);
+        r = r.slice(1);
     }
     if (s[0] === 0 && s.byteLength % 16 == 1) {
-    s = s.slice(1);
+        s = s.slice(1);
     }
 
 
     // R and S length is assumed multiple of 128bit.
     // If missing a byte then it will be padded by 0.
     if ((r.byteLength % 16) == 15) {
-    r = new Uint8Array(mergeBuffer(new Uint8Array([0]), r));
+        r = new Uint8Array(mergeBuffer(new Uint8Array([0]), r));
     }
     if ((s.byteLength % 16) == 15) {
-    s = new Uint8Array(mergeBuffer(new Uint8Array([0]), s));
+        s = new Uint8Array(mergeBuffer(new Uint8Array([0]), s));
     }
 
 
@@ -183,7 +189,7 @@ function padRightWithZeros(input: ArrayBufferLike): Uint8Array {
 }
 
 
-function prettyPrintUintArray(name: string, input: ArrayBufferLike){
+function prettyPrintUintArray(name: string, input: ArrayBufferLike) {
     console.log(name, " = ", "[", new Uint8Array(input).join(","), "]");
 }
 
@@ -210,7 +216,7 @@ const webAuthn = async () => {
 
     const getRequest = {
         allowCredentials: [
-            { id: attestation.rawId, type: "public-key"}
+            { id: attestation.rawId, type: "public-key" }
         ],
         challenge: challenge,
         rpId: "localhost",
@@ -220,7 +226,7 @@ const webAuthn = async () => {
     };
 
     var assertion = await navigator.credentials.get({ publicKey: getRequest })
-    
+
     // Extract values from webauthn interactions
     var pubKey = attestation.response.getPublicKey();
     var signature = assertion.response.signature;
@@ -234,7 +240,7 @@ const webAuthn = async () => {
     var paddedClientDataJSON = padRightWithZeros(new Uint8Array(clientDataJSON));
     // challenge is containted in the clientDataJSON: https://www.w3.org/TR/webauthn-2/#dictionary-client-data
     // TODO: Should not be extracted from clietnDataJSON. Should be computed separatly
-    var extracted_challenge = clientDataJSON.slice(36,36+43);
+    var extracted_challenge = clientDataJSON.slice(36, 36 + 43);
 
     // Display values
     prettyPrintUintArray("authenticatorData", authenticatorData);
@@ -251,6 +257,9 @@ const signAndSend = async () => {
     // Sign the transaction
 
     // Send the transaction
+    await setupCosmos("http://localhost:26657");
+    const resp = await broadcastTx();
+    setTimeout(async () => console.log(await checkTxStatus(resp.transactionHash)), 1000);
 
     // Switch to waiter view
 }
