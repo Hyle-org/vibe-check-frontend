@@ -1,6 +1,8 @@
 <script setup lang="ts">
 import * as faceApi from "face-api.js";
 import { onMounted, ref } from "vue";
+import * as asn1js from "asn1js";
+import * as pkijs from "pkijs";
 
 // resize the overlay canvas to the input dimensions
 const canvasOutput = ref<HTMLCanvasElement | null>(null);
@@ -15,25 +17,25 @@ const lastDetections = ref<faceApi.FaceDetection[]>([]);
 
 const status = ref<string>("capturing");
 
-// onMounted(async () => {
-//     await faceApi.nets.tinyFaceDetector.loadFromUri("/models");
-//     navigator.mediaDevices
-//         .getUserMedia({ video: true, audio: false })
-//         .then(async (stream) => {
-//             videoFeed.value!.srcObject = stream;
-//             videoFeed.value!.play();
-//             detectionTimer.value = setInterval(async () => {
-//                 const displaySize = { width: videoFeed.value!.clientWidth, height: videoFeed.value!.clientHeight }
-//                 faceApi.matchDimensions(canvasOutput.value!, displaySize)
-//                 lastDetections.value = await faceApi.detectAllFaces(videoFeed.value!, new faceApi.TinyFaceDetectorOptions())
-//                 const resizedDetections = faceApi.resizeResults(lastDetections.value, displaySize)
-//                 faceApi.draw.drawDetections(canvasOutput.value!, resizedDetections);
-//             }, 1000);
-//         })
-//         .catch((err) => {
-//             console.error(`An error occurred: ${err}`);
-//         });
-// });
+onMounted(async () => {
+    await faceApi.nets.tinyFaceDetector.loadFromUri("/models");
+    navigator.mediaDevices
+        .getUserMedia({ video: true, audio: false })
+        .then(async (stream) => {
+            videoFeed.value!.srcObject = stream;
+            videoFeed.value!.play();
+            detectionTimer.value = setInterval(async () => {
+                const displaySize = { width: videoFeed.value!.clientWidth, height: videoFeed.value!.clientHeight }
+                faceApi.matchDimensions(canvasOutput.value!, displaySize)
+                lastDetections.value = await faceApi.detectAllFaces(videoFeed.value!, new faceApi.TinyFaceDetectorOptions())
+                const resizedDetections = faceApi.resizeResults(lastDetections.value, displaySize)
+                faceApi.draw.drawDetections(canvasOutput.value!, resizedDetections);
+            }, 1000);
+        })
+        .catch((err) => {
+            console.error(`An error occurred: ${err}`);
+        });
+});
 
 const takeScreenshot = async () => {
     const canvas = screenshotOutput.value!;
@@ -92,16 +94,104 @@ const prepareTx = () => {
     // Prepare the transaction
 }
 
-const buf2hex = (buffer) => {
-  return [...new Uint8Array(buffer)]
-      .map(x => x.toString(16).padStart(2, '0'))
-      .join('');
+function extractPublicKeyCoordinates(publicKeyInfo: ArrayBuffer): [ x: Uint8Array, y: Uint8Array ] {
+  const asn1 = asn1js.fromBER(publicKeyInfo);
+  if (asn1.offset === -1) {
+    throw new Error("PublicKey wrongly formatted");
+  }
+
+  const spki = new pkijs.PublicKeyInfo({ schema: asn1.result });
+
+  const subjectPublicKey = spki.subjectPublicKey.valueBlock.valueHex;
+  const keyData = new Uint8Array(subjectPublicKey);
+
+  if (keyData[0] !== 0x04) {
+    throw new Error("PublicKey is not in expected format");
+  }
+
+  const x = keyData.slice(1, 33);
+  const y = keyData.slice(33, 65);
+
+  return [x, y];
 }
 
-let rawId;
-let publicKey_str;
 
-const webAuthnCreate = async () => {
+function mergeBuffer(buffer1: ArrayBuffer, buffer2: ArrayBuffer) {
+  const tmp = new Uint8Array(buffer1.byteLength + buffer2.byteLength);
+  tmp.set(new Uint8Array(buffer1), 0);
+  tmp.set(new Uint8Array(buffer2), buffer1.byteLength);
+  return tmp.buffer;
+}
+
+function extractSignature(input: Uint8Array) {
+    // https://www.w3.org/TR/webauthn-2/#sctn-signature-attestation-types
+    if (input[0] !== 0x30) throw new Error('Input is not an ASN.1 sequence');
+    const seqLength = input[1];
+    const elements : Uint8Array[] = [];
+    let current = input.slice(2, 2 + seqLength);
+    while (current.length > 0) {
+        const tag = current[0];
+        if (tag !== 0x02) throw new Error('Expected ASN.1 sequence element to be an INTEGER');
+        const elLength = current[1];
+        elements.push(current.slice(2, 2 + elLength));
+        current = current.slice(2 + elLength);
+    }
+    if (elements.length !== 2) throw new Error('Expected 2 ASN.1 sequence elements');
+    let [r, s] = elements;
+
+    // R and S length is assumed multiple of 128bit.
+    // If leading is 0 and modulo of length is 1 byte then
+    // leading 0 is for two's complement and will be removed.
+    if (r[0] === 0 && r.byteLength % 16 == 1) {
+    r = r.slice(1);
+    }
+    if (s[0] === 0 && s.byteLength % 16 == 1) {
+    s = s.slice(1);
+    }
+
+
+    // R and S length is assumed multiple of 128bit.
+    // If missing a byte then it will be padded by 0.
+    if ((r.byteLength % 16) == 15) {
+    r = new Uint8Array(mergeBuffer(new Uint8Array([0]), r));
+    }
+    if ((s.byteLength % 16) == 15) {
+    s = new Uint8Array(mergeBuffer(new Uint8Array([0]), s));
+    }
+
+
+    // If R and S length is not still multiple of 128bit,
+    // then error
+    if (r.byteLength % 16 != 0) throw Error("unknown ECDSA sig r length error");
+    if (s.byteLength % 16 != 0) throw Error("unknown ECDSA sig s length error");
+
+
+    return mergeBuffer(r, s);
+}
+
+function padRightWithZeros(input: ArrayBufferLike): Uint8Array {
+    var targetLength = 255;
+    var inputArray = new Uint8Array(input);
+    if (inputArray.length >= targetLength) {
+        return inputArray;
+    }
+
+    const paddedArray = new Uint8Array(targetLength);
+    paddedArray.set(inputArray, 0);
+
+    return paddedArray;
+}
+
+
+function prettyPrintUintArray(name: string, input: ArrayBufferLike){
+    console.log(name, " = ", "[", new Uint8Array(input).join(","), "]");
+}
+
+// Challenge should be 16bytes long
+// https://www.w3.org/TR/webauthn-2/#sctn-cryptographic-challenges
+var challenge = Uint8Array.from("0123456789abcdef0123456789abcdef", c => c.charCodeAt(0));
+
+const webAuthn = async () => {
     const publicKey = {
         attestation: "none",
         authenticatorSelection: {
@@ -109,65 +199,50 @@ const webAuthnCreate = async () => {
             requireResidentKey: false,
             residentKey: "discouraged",
         },
-        challenge: Uint8Array.from("txHash", c => c.charCodeAt(0)),
+        challenge: challenge,
         pubKeyCredParams: [{ alg: -7, type: "public-key" }],
         rp: { name: "Vibe Checker", id: "localhost" },
         timeout: 600000,
         user: { id: Uint8Array.from("myUserId", c => c.charCodeAt(0)), name: "jamiedoe", displayName: "Jamie Doe" },
     };
 
-    let publicKeyCredential = await navigator.credentials.create({ publicKey: publicKey });
-    publicKey_str = buf2hex(publicKeyCredential.response.getPublicKey());
-    rawId = publicKeyCredential.rawId;
-    console.log(publicKeyCredential);
-    // console.log(publicKeyCredential.response.id);
-}
+    var attestation = await navigator.credentials.create({ publicKey: publicKey });
 
-const webAuthnGetwithId = async () => {
-    let temp = "q0hhp1Z0kDMQRBsRIeaX52bL9qXjb6D1_jcmfbWt3k5jbfVZawp19BW5oGz7MJuBi4LvQr-U6LM1Z1Pv-3NUGQ";
     const getRequest = {
         allowCredentials: [
-            { id: Uint8Array.from(temp, c => c.charCodeAt(0)), type: "public-key"}
+            { id: attestation.rawId, type: "public-key"}
         ],
-        challenge: Uint8Array.from("txHash", c => c.charCodeAt(0)),
+        challenge: challenge,
         rpId: "localhost",
         attestation: "none",
         timeout: 600000,
         userVerification: "discouraged",
     };
-    navigator.credentials.get({ publicKey: getRequest })
-        .then(function (assertion) {
-            const signature = buf2hex(assertion.response.signature);
-            const authenticatorData = buf2hex(assertion.response.authenticatorData);
-            console.log(assertion.response);
-            console.log("pubkey = "+ publicKey_str);
-            console.log("signature = " + signature);
-            console.log("authenticatorData = " + authenticatorData);
-        }).catch(function (err) {
-            console.log(err);
-        });
-}
 
-const webAuthnGetwithoutId = async () => {
-    const getRequest = {
-        allowCredentials: [],
-        challenge: Uint8Array.from("txHash", c => c.charCodeAt(0)),
-        rpId: "localhost",
-        attestation: "none",
-        timeout: 600000,
-        userVerification: "discouraged",
-    };
-    navigator.credentials.get({ publicKey: getRequest })
-        .then(function (assertion) {
-            const signature = buf2hex(assertion.response.signature);
-            const authenticatorData = buf2hex(assertion.response.authenticatorData);
-            console.log(assertion.response);
-            console.log("pubkey = "+ publicKey_str);
-            console.log("signature = " + signature);
-            console.log("authenticatorData = " + authenticatorData);
-        }).catch(function (err) {
-            console.log(err);
-        });
+    var assertion = await navigator.credentials.get({ publicKey: getRequest })
+    
+    // Extract values from webauthn interactions
+    var pubKey = attestation.response.getPublicKey();
+    var signature = assertion.response.signature;
+    var clientDataJSON = await assertion.response.clientDataJSON;
+    var authenticatorData = await assertion.response.authenticatorData;
+
+    // Format values to make them exploitable
+    // TODO: isn't it flaky ? When r/s are padded with 00
+    var [pub_key_x, pub_key_y] = extractPublicKeyCoordinates(pubKey);
+    var extracted_signature = extractSignature(new Uint8Array(signature));
+    var paddedClientDataJSON = padRightWithZeros(new Uint8Array(clientDataJSON));
+    // challenge is containted in the clientDataJSON: https://www.w3.org/TR/webauthn-2/#dictionary-client-data
+    // TODO: Should not be extracted from clietnDataJSON. Should be computed separatly
+    var extracted_challenge = clientDataJSON.slice(36,36+43);
+
+    // Display values
+    prettyPrintUintArray("authenticatorData", authenticatorData);
+    prettyPrintUintArray("clientDataJSON", paddedClientDataJSON);
+    prettyPrintUintArray("signature", extracted_signature);
+    prettyPrintUintArray("challenge", extracted_challenge);
+    prettyPrintUintArray("pub_key_x", pub_key_x);
+    prettyPrintUintArray("pub_key_y", pub_key_y);
 }
 
 const signAndSend = async () => {
@@ -198,7 +273,7 @@ const signAndSend = async () => {
         </template>
         <template v-else>
             <div class="flex justify-center">
-                <!-- <div :class="'rounded-xl overflow-hidden mirror relative ' + (!screenshotData ? '' : 'hidden')">
+                <div :class="'rounded-xl overflow-hidden mirror relative ' + (!screenshotData ? '' : 'hidden')">
                     <video ref="videoFeed" autoplay></video>
                     <canvas class="absolute top-0" ref="canvasOutput"></canvas>
                 </div>
@@ -207,7 +282,7 @@ const signAndSend = async () => {
                     <div class="absolute top-0 w-full h-full flex justify-center items-center">
                         <p class="text-white font-semibold">{{ fakeProcessingMessage }}</p>
                     </div>
-                </div> -->
+                </div>
             </div>
             <div v-if="status != 'success' && status != 'failed'" class="flex justify-center my-8">
                 <button @click="takeScreenshot">Claim token</button>
@@ -216,13 +291,7 @@ const signAndSend = async () => {
                 <button @click="signAndSend">Sign & send TX</button>
             </div>
             <div class="flex justify-center my-8">
-                <button @click="webAuthnCreate">webAuthnCreate</button>
-            </div>
-            <div class="flex justify-center my-8">
-                <button @click="webAuthnGetwithId">webAuthnGetwithId</button>
-            </div>
-            <div class="flex justify-center my-8">
-                <button @click="webAuthnGetwithoutId">webAuthnGetwithoutId</button>
+                <button @click="webAuthn">webAuthn</button>
             </div>
         </template>
     </div>
