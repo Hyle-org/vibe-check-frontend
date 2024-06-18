@@ -1,6 +1,8 @@
 <script setup lang="ts">
 import * as faceApi from "face-api.js";
 import { onMounted, ref } from "vue";
+import * as asn1js from "asn1js";
+import * as pkijs from "pkijs";
 
 // resize the overlay canvas to the input dimensions
 const canvasOutput = ref<HTMLCanvasElement | null>(null);
@@ -92,6 +94,157 @@ const prepareTx = () => {
     // Prepare the transaction
 }
 
+function extractPublicKeyCoordinates(publicKeyInfo: ArrayBuffer): [ x: Uint8Array, y: Uint8Array ] {
+  const asn1 = asn1js.fromBER(publicKeyInfo);
+  if (asn1.offset === -1) {
+    throw new Error("PublicKey wrongly formatted");
+  }
+
+  const spki = new pkijs.PublicKeyInfo({ schema: asn1.result });
+
+  const subjectPublicKey = spki.subjectPublicKey.valueBlock.valueHex;
+  const keyData = new Uint8Array(subjectPublicKey);
+
+  if (keyData[0] !== 0x04) {
+    throw new Error("PublicKey is not in expected format");
+  }
+
+  const x = keyData.slice(1, 33);
+  const y = keyData.slice(33, 65);
+
+  return [x, y];
+}
+
+
+function mergeBuffer(buffer1: ArrayBuffer, buffer2: ArrayBuffer) {
+  const tmp = new Uint8Array(buffer1.byteLength + buffer2.byteLength);
+  tmp.set(new Uint8Array(buffer1), 0);
+  tmp.set(new Uint8Array(buffer2), buffer1.byteLength);
+  return tmp.buffer;
+}
+
+function extractSignature(input: Uint8Array) {
+    // https://www.w3.org/TR/webauthn-2/#sctn-signature-attestation-types
+    if (input[0] !== 0x30) throw new Error('Input is not an ASN.1 sequence');
+    const seqLength = input[1];
+    const elements : Uint8Array[] = [];
+    let current = input.slice(2, 2 + seqLength);
+    while (current.length > 0) {
+        const tag = current[0];
+        if (tag !== 0x02) throw new Error('Expected ASN.1 sequence element to be an INTEGER');
+        const elLength = current[1];
+        elements.push(current.slice(2, 2 + elLength));
+        current = current.slice(2 + elLength);
+    }
+    if (elements.length !== 2) throw new Error('Expected 2 ASN.1 sequence elements');
+    let [r, s] = elements;
+
+    // R and S length is assumed multiple of 128bit.
+    // If leading is 0 and modulo of length is 1 byte then
+    // leading 0 is for two's complement and will be removed.
+    if (r[0] === 0 && r.byteLength % 16 == 1) {
+    r = r.slice(1);
+    }
+    if (s[0] === 0 && s.byteLength % 16 == 1) {
+    s = s.slice(1);
+    }
+
+
+    // R and S length is assumed multiple of 128bit.
+    // If missing a byte then it will be padded by 0.
+    if ((r.byteLength % 16) == 15) {
+    r = new Uint8Array(mergeBuffer(new Uint8Array([0]), r));
+    }
+    if ((s.byteLength % 16) == 15) {
+    s = new Uint8Array(mergeBuffer(new Uint8Array([0]), s));
+    }
+
+
+    // If R and S length is not still multiple of 128bit,
+    // then error
+    if (r.byteLength % 16 != 0) throw Error("unknown ECDSA sig r length error");
+    if (s.byteLength % 16 != 0) throw Error("unknown ECDSA sig s length error");
+
+
+    return mergeBuffer(r, s);
+}
+
+function padRightWithZeros(input: ArrayBufferLike): Uint8Array {
+    var targetLength = 255;
+    var inputArray = new Uint8Array(input);
+    if (inputArray.length >= targetLength) {
+        return inputArray;
+    }
+
+    const paddedArray = new Uint8Array(targetLength);
+    paddedArray.set(inputArray, 0);
+
+    return paddedArray;
+}
+
+
+function prettyPrintUintArray(name: string, input: ArrayBufferLike){
+    console.log(name, " = ", "[", new Uint8Array(input).join(","), "]");
+}
+
+// Challenge should be 16bytes long
+// https://www.w3.org/TR/webauthn-2/#sctn-cryptographic-challenges
+var challenge = Uint8Array.from("0123456789abcdef0123456789abcdef", c => c.charCodeAt(0));
+
+const webAuthn = async () => {
+    const publicKey = {
+        attestation: "none",
+        authenticatorSelection: {
+            authenticatorAttachment: "cross-platform",
+            requireResidentKey: false,
+            residentKey: "discouraged",
+        },
+        challenge: challenge,
+        pubKeyCredParams: [{ alg: -7, type: "public-key" }],
+        rp: { name: "Vibe Checker", id: "localhost" },
+        timeout: 600000,
+        user: { id: Uint8Array.from("myUserId", c => c.charCodeAt(0)), name: "jamiedoe", displayName: "Jamie Doe" },
+    };
+
+    var attestation = await navigator.credentials.create({ publicKey: publicKey });
+
+    const getRequest = {
+        allowCredentials: [
+            { id: attestation.rawId, type: "public-key"}
+        ],
+        challenge: challenge,
+        rpId: "localhost",
+        attestation: "none",
+        timeout: 600000,
+        userVerification: "discouraged",
+    };
+
+    var assertion = await navigator.credentials.get({ publicKey: getRequest })
+    
+    // Extract values from webauthn interactions
+    var pubKey = attestation.response.getPublicKey();
+    var signature = assertion.response.signature;
+    var clientDataJSON = await assertion.response.clientDataJSON;
+    var authenticatorData = await assertion.response.authenticatorData;
+
+    // Format values to make them exploitable
+    // TODO: isn't it flaky ? When r/s are padded with 00
+    var [pub_key_x, pub_key_y] = extractPublicKeyCoordinates(pubKey);
+    var extracted_signature = extractSignature(new Uint8Array(signature));
+    var paddedClientDataJSON = padRightWithZeros(new Uint8Array(clientDataJSON));
+    // challenge is containted in the clientDataJSON: https://www.w3.org/TR/webauthn-2/#dictionary-client-data
+    // TODO: Should not be extracted from clietnDataJSON. Should be computed separatly
+    var extracted_challenge = clientDataJSON.slice(36,36+43);
+
+    // Display values
+    prettyPrintUintArray("authenticatorData", authenticatorData);
+    prettyPrintUintArray("clientDataJSON", paddedClientDataJSON);
+    prettyPrintUintArray("signature", extracted_signature);
+    prettyPrintUintArray("challenge", extracted_challenge);
+    prettyPrintUintArray("pub_key_x", pub_key_x);
+    prettyPrintUintArray("pub_key_y", pub_key_y);
+}
+
 const signAndSend = async () => {
     const tx = prepareTx()
     // Show relevant details to the user
@@ -136,6 +289,9 @@ const signAndSend = async () => {
             </div>
             <div v-else class="flex justify-center my-8">
                 <button @click="signAndSend">Sign & send TX</button>
+            </div>
+            <div class="flex justify-center my-8">
+                <button @click="webAuthn">webAuthn</button>
             </div>
         </template>
     </div>
