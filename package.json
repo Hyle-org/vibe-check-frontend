@@ -5,15 +5,18 @@
   "type": "module",
   "scripts": {
     "dev": "vite",
-    "build": "vue-tsc && vite build",
+    "build": "vite build",
     "preview": "vite preview"
   },
   "dependencies": {
     "@cosmjs/proto-signing": "^0.32.3",
     "@cosmjs/stargate": "^0.32.3",
     "@eslint/js": "^9.4.0",
+    "@noir-lang/backend_barretenberg": "^0.30.0",
+    "@noir-lang/noir_js": "^0.30.0",
     "@types/eslint__js": "^8.42.3",
     "asn1.js": "^5.4.1",
+    "dotenv": "^16.4.5",
     "eslint": "^9.4.0",
     "eslint-config-prettier": "^9.1.0",
     "eslint-plugin-prettier-vue": "^5.0.0",
@@ -21,6 +24,7 @@
     "face-api.js": "^0.22.2",
     "pkijs": "^3.1.0",
     "protobufjs": "^7.3.2",
+    "rollup-plugin-copy": "^3.5.0",
     "typescript-eslint": "^7.12.0",
     "vue": "^3.4.21",
     "vue-eslint-parser": "^9.4.3"
