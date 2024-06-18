@@ -139,7 +139,7 @@ const signAndSend = async () => {
         </template>
         <template v-else>
             <div class="flex justify-center">
-                <div :class="'rounded-xl overflow-hidden mirror relative ' + (!screenshotData ? '' : 'hidden')">
+                <div :class="'rounded overflow-hidden mirror relative ' + (!screenshotData ? '' : 'hidden')">
                     <video ref="videoFeed" autoplay></video>
                     <canvas class="absolute top-0" ref="canvasOutput"></canvas>
                 </div>
@@ -167,6 +167,10 @@ const signAndSend = async () => {
 </template>
 
 <style>
+body {
+    @apply bg-primary text-white font-garamond;
+}
+
 h1 {
     @apply text-4xl;
 }
