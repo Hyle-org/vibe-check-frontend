@@ -3,8 +3,12 @@ import * as faceApi from "face-api.js";
 import { onMounted, ref } from "vue";
 import * as asn1js from "asn1js";
 import * as pkijs from "pkijs";
+import { BarretenbergBackend  } from '@noir-lang/backend_barretenberg';
+import { Noir } from '@noir-lang/noir_js';
+import * as fs from 'fs';
+// Loading webauthn circuit
+import circuit from "./webauthn.json";
 
-import { broadcastTx, checkTxStatus, setupCosmos } from "./cosmos";
 
 // resize the overlay canvas to the input dimensions
 const canvasOutput = ref<HTMLCanvasElement | null>(null);
@@ -121,58 +125,40 @@ function extractPublicKeyCoordinates(publicKeyInfo: ArrayBuffer): [x: Uint8Array
     return [x, y];
 }
 
-
-function mergeBuffer(buffer1: ArrayBuffer, buffer2: ArrayBuffer) {
-    const tmp = new Uint8Array(buffer1.byteLength + buffer2.byteLength);
-    tmp.set(new Uint8Array(buffer1), 0);
-    tmp.set(new Uint8Array(buffer2), buffer1.byteLength);
-    return tmp.buffer;
-}
-
-function extractSignature(input: Uint8Array) {
-    // https://www.w3.org/TR/webauthn-2/#sctn-signature-attestation-types
-    if (input[0] !== 0x30) throw new Error('Input is not an ASN.1 sequence');
-    const seqLength = input[1];
-    const elements: Uint8Array[] = [];
-    let current = input.slice(2, 2 + seqLength);
-    while (current.length > 0) {
-        const tag = current[0];
-        if (tag !== 0x02) throw new Error('Expected ASN.1 sequence element to be an INTEGER');
-        const elLength = current[1];
-        elements.push(current.slice(2, 2 + elLength));
-        current = current.slice(2 + elLength);
+function extractSignature(signature: ArrayBuffer): Uint8Array {
+    const asn1 = asn1js.fromBER(signature);
+    if (asn1.offset === -1) {
+    throw new Error("Signature wrongly formatted");
     }
-    if (elements.length !== 2) throw new Error('Expected 2 ASN.1 sequence elements');
-    let [r, s] = elements;
 
-    // R and S length is assumed multiple of 128bit.
-    // If leading is 0 and modulo of length is 1 byte then
-    // leading 0 is for two's complement and will be removed.
-    if (r[0] === 0 && r.byteLength % 16 == 1) {
+    const sequence = asn1.result;
+    if (!(sequence instanceof asn1js.Sequence) || sequence.valueBlock.value.length !== 2) {
+    throw new Error("Unexpected ASN.1 structure");
+    }
+
+    const rBlock = sequence.valueBlock.value[0] as asn1js.Integer;
+    const sBlock = sequence.valueBlock.value[1] as asn1js.Integer;
+
+    var r = new Uint8Array(rBlock.valueBlock.valueHex);
+    var s = new Uint8Array(sBlock.valueBlock.valueHex);
+    if (r.length == 33) {
         r = r.slice(1);
     }
-    if (s[0] === 0 && s.byteLength % 16 == 1) {
+    if (s.length == 33) {
         s = s.slice(1);
     }
 
+    // Assurez-vous que r et s sont exactement de 32 octets chacun
+    const rPadded = new Uint8Array(32);
+    rPadded.set(r, 32 - r.length);
+    const sPadded = new Uint8Array(32);
+    sPadded.set(s, 32 - s.length);
 
-    // R and S length is assumed multiple of 128bit.
-    // If missing a byte then it will be padded by 0.
-    if ((r.byteLength % 16) == 15) {
-        r = new Uint8Array(mergeBuffer(new Uint8Array([0]), r));
-    }
-    if ((s.byteLength % 16) == 15) {
-        s = new Uint8Array(mergeBuffer(new Uint8Array([0]), s));
-    }
+    const signature64 = new Uint8Array(64);
+    signature64.set(rPadded, 0);
+    signature64.set(sPadded, 32);
 
-
-    // If R and S length is not still multiple of 128bit,
-    // then error
-    if (r.byteLength % 16 != 0) throw Error("unknown ECDSA sig r length error");
-    if (s.byteLength % 16 != 0) throw Error("unknown ECDSA sig s length error");
-
-
-    return mergeBuffer(r, s);
+return signature64;
 }
 
 function padRightWithZeros(input: ArrayBufferLike): Uint8Array {
@@ -196,6 +182,7 @@ function prettyPrintUintArray(name: string, input: ArrayBufferLike) {
 // Challenge should be 16bytes long
 // https://www.w3.org/TR/webauthn-2/#sctn-cryptographic-challenges
 var challenge = Uint8Array.from("0123456789abcdef0123456789abcdef", c => c.charCodeAt(0));
+var noirInput = {};
 
 const webAuthn = async () => {
     const publicKey = {
@@ -239,16 +226,49 @@ const webAuthn = async () => {
     var extracted_signature = extractSignature(new Uint8Array(signature));
     var paddedClientDataJSON = padRightWithZeros(new Uint8Array(clientDataJSON));
     // challenge is containted in the clientDataJSON: https://www.w3.org/TR/webauthn-2/#dictionary-client-data
-    // TODO: Should not be extracted from clietnDataJSON. Should be computed separatly
-    var extracted_challenge = clientDataJSON.slice(36, 36 + 43);
+    // TODO: exported challenge should NOT be extracted from clientDataJSON
+    var extracted_challenge = clientDataJSON.slice(36,36+43);
+    var client_data_json_len = clientDataJSON.byteLength;
+
+    noirInput = {
+        authenticator_data: new Uint8Array(authenticatorData),
+        client_data_json_len: client_data_json_len,
+        client_data_json: new Uint8Array(paddedClientDataJSON),
+        signature: new Uint8Array(extracted_signature),
+        challenge: new Uint8Array(extracted_challenge),
+        pub_key_x: new Uint8Array(pub_key_x),
+        pub_key_y: new Uint8Array(pub_key_y)
+    };
+    console.log(noirInput);
 
     // Display values
-    prettyPrintUintArray("authenticatorData", authenticatorData);
-    prettyPrintUintArray("clientDataJSON", paddedClientDataJSON);
-    prettyPrintUintArray("signature", extracted_signature);
-    prettyPrintUintArray("challenge", extracted_challenge);
-    prettyPrintUintArray("pub_key_x", pub_key_x);
-    prettyPrintUintArray("pub_key_y", pub_key_y);
+    // prettyPrintUintArray("authenticatorData", authenticatorData);
+    // prettyPrintUintArray("clientDataJSON", paddedClientDataJSON);
+    // prettyPrintUintArray("signature", extracted_signature);
+    // prettyPrintUintArray("extracted_challenge", extracted_challenge);
+    // prettyPrintUintArray("challenge", challenge);
+    // prettyPrintUintArray("pub_key_x", pub_key_x);
+    // prettyPrintUintArray("pub_key_y", pub_key_y);
+}
+
+const prove = async () => {
+    // Circuit tools setup
+    const backend = new BarretenbergBackend(circuit);
+    console.log("hi...");
+    // const verificationKey = await backend.getVerificationKey();
+    const verificationKey = await backend.getVerificationKey();
+    console.log("...oké");
+
+    /////// LOCAL PROOF CREATION /////////
+    // Proving
+    const noir = new Noir(circuit, backend);
+    const proof = await noir.generateProof(noirInput);
+    var jsonProof = JSON.stringify({
+        ...proof,
+        proof: Array.from(proof.proof)
+    });
+    fs.writeFileSync('../proofs/proof.json', jsonProof);
+    fs.writeFileSync('../proofs/vkey', verificationKey);
 }
 
 const signAndSend = async () => {
@@ -301,6 +321,9 @@ const signAndSend = async () => {
             </div>
             <div class="flex justify-center my-8">
                 <button @click="webAuthn">webAuthn</button>
+            </div>
+            <div class="flex justify-center my-8">
+                <button @click="prove">Prove webAuthn</button>
             </div>
         </template>
     </div>
