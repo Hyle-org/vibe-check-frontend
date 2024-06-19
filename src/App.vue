@@ -4,6 +4,8 @@ import { onMounted, ref } from "vue";
 import { webAuthn } from "./webauthn";
 import { prove } from "./prover";
 
+import Logo from "./assets/Hyle_logo.svg";
+
 // resize the overlay canvas to the input dimensions
 const canvasOutput = ref<HTMLCanvasElement | null>(null);
 const videoFeed = ref<HTMLVideoElement | null>(null);
@@ -125,7 +127,7 @@ const signAndSend = async () => {
 <template>
     <div class="container m-auto">
         <h1 class="text-center my-4">Vibe Check</h1>
-        <h3 class="text-center my-4">Hylé</h3>
+        <h3 class="text-center my-4"><img :src="Logo" alt="Hylé logo" class="h-10 m-auto"></img></h3>
         <template v-if="status == 'signing'">
             <p>TX Hash: 0x123134134134</p>
             <p>Signed by public address 0x43990843.webAuthn</p>
@@ -176,15 +178,15 @@ h1 {
 }
 
 button {
-    @apply bg-blue-500 text-white font-bold py-2 px-4 rounded;
+    @apply border-secondary border-4 text-secondary py-8 px-12 text-2xl;
 }
 
 button:hover {
-    @apply bg-blue-400;
+    @apply bg-secondary text-primary;
 }
 
 button:active {
-    @apply bg-blue-800;
+    @apply bg-secondary text-primary;
 }
 
 .mirror {
