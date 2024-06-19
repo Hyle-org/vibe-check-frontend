@@ -1,14 +1,8 @@
 <script setup lang="ts">
 import * as faceApi from "face-api.js";
 import { onMounted, ref } from "vue";
-import * as asn1js from "asn1js";
-import * as pkijs from "pkijs";
-import { BarretenbergBackend  } from '@noir-lang/backend_barretenberg';
-import { Noir } from '@noir-lang/noir_js';
-import * as fs from 'fs';
-// Loading webauthn circuit
-import circuit from "./webauthn.json";
-
+import { webAuthn } from "./webauthn";
+import { prove } from "./prover";
 
 // resize the overlay canvas to the input dimensions
 const canvasOutput = ref<HTMLCanvasElement | null>(null);
@@ -22,6 +16,8 @@ const detectionTimer = ref<unknown | null>(null);
 const lastDetections = ref<faceApi.FaceDetection[]>([]);
 
 const status = ref<string>("capturing");
+
+const noirInput = ref<unknown | null>(null);
 
 onMounted(async () => {
     await faceApi.nets.tinyFaceDetector.loadFromUri("/models");
@@ -97,178 +93,19 @@ const zoomInOnBox = (canvas, img, x, y, width, height, steps) => {
     }, 400);
 }
 
+const doWebAuthn = async () => {
+    noirInput.value = await webAuthn();
+}
+
+const doProve = async () => {
+    prove(noirInput.value);
+}
+
 const prepareTx = () => {
     return {
         tx_bytes: "0x1234",
         mode: "BROADCAST_MODE_SYNC",
     };
-}
-
-function extractPublicKeyCoordinates(publicKeyInfo: ArrayBuffer): [x: Uint8Array, y: Uint8Array] {
-    const asn1 = asn1js.fromBER(publicKeyInfo);
-    if (asn1.offset === -1) {
-        throw new Error("PublicKey wrongly formatted");
-    }
-
-    const spki = new pkijs.PublicKeyInfo({ schema: asn1.result });
-
-    const subjectPublicKey = spki.subjectPublicKey.valueBlock.valueHex;
-    const keyData = new Uint8Array(subjectPublicKey);
-
-    if (keyData[0] !== 0x04) {
-        throw new Error("PublicKey is not in expected format");
-    }
-
-    const x = keyData.slice(1, 33);
-    const y = keyData.slice(33, 65);
-
-    return [x, y];
-}
-
-function extractSignature(signature: ArrayBuffer): Uint8Array {
-    const asn1 = asn1js.fromBER(signature);
-    if (asn1.offset === -1) {
-    throw new Error("Signature wrongly formatted");
-    }
-
-    const sequence = asn1.result;
-    if (!(sequence instanceof asn1js.Sequence) || sequence.valueBlock.value.length !== 2) {
-    throw new Error("Unexpected ASN.1 structure");
-    }
-
-    const rBlock = sequence.valueBlock.value[0] as asn1js.Integer;
-    const sBlock = sequence.valueBlock.value[1] as asn1js.Integer;
-
-    var r = new Uint8Array(rBlock.valueBlock.valueHex);
-    var s = new Uint8Array(sBlock.valueBlock.valueHex);
-    if (r.length == 33) {
-        r = r.slice(1);
-    }
-    if (s.length == 33) {
-        s = s.slice(1);
-    }
-
-    // Assurez-vous que r et s sont exactement de 32 octets chacun
-    const rPadded = new Uint8Array(32);
-    rPadded.set(r, 32 - r.length);
-    const sPadded = new Uint8Array(32);
-    sPadded.set(s, 32 - s.length);
-
-    const signature64 = new Uint8Array(64);
-    signature64.set(rPadded, 0);
-    signature64.set(sPadded, 32);
-
-return signature64;
-}
-
-function padRightWithZeros(input: ArrayBufferLike): Uint8Array {
-    var targetLength = 255;
-    var inputArray = new Uint8Array(input);
-    if (inputArray.length >= targetLength) {
-        return inputArray;
-    }
-
-    const paddedArray = new Uint8Array(targetLength);
-    paddedArray.set(inputArray, 0);
-
-    return paddedArray;
-}
-
-
-function prettyPrintUintArray(name: string, input: ArrayBufferLike) {
-    console.log(name, " = ", "[", new Uint8Array(input).join(","), "]");
-}
-
-// Challenge should be 16bytes long
-// https://www.w3.org/TR/webauthn-2/#sctn-cryptographic-challenges
-var challenge = Uint8Array.from("0123456789abcdef0123456789abcdef", c => c.charCodeAt(0));
-var noirInput = {};
-
-const webAuthn = async () => {
-    const publicKey = {
-        attestation: "none",
-        authenticatorSelection: {
-            authenticatorAttachment: "cross-platform",
-            requireResidentKey: false,
-            residentKey: "discouraged",
-        },
-        challenge: challenge,
-        pubKeyCredParams: [{ alg: -7, type: "public-key" }],
-        rp: { name: "Vibe Checker", id: "localhost" },
-        timeout: 600000,
-        user: { id: Uint8Array.from("myUserId", c => c.charCodeAt(0)), name: "jamiedoe", displayName: "Jamie Doe" },
-    };
-
-    var attestation = await navigator.credentials.create({ publicKey: publicKey });
-
-    const getRequest = {
-        allowCredentials: [
-            { id: attestation.rawId, type: "public-key" }
-        ],
-        challenge: challenge,
-        rpId: "localhost",
-        attestation: "none",
-        timeout: 600000,
-        userVerification: "discouraged",
-    };
-
-    var assertion = await navigator.credentials.get({ publicKey: getRequest })
-
-    // Extract values from webauthn interactions
-    var pubKey = attestation.response.getPublicKey();
-    var signature = assertion.response.signature;
-    var clientDataJSON = await assertion.response.clientDataJSON;
-    var authenticatorData = await assertion.response.authenticatorData;
-
-    // Format values to make them exploitable
-    // TODO: isn't it flaky ? When r/s are padded with 00
-    var [pub_key_x, pub_key_y] = extractPublicKeyCoordinates(pubKey);
-    var extracted_signature = extractSignature(new Uint8Array(signature));
-    var paddedClientDataJSON = padRightWithZeros(new Uint8Array(clientDataJSON));
-    // challenge is containted in the clientDataJSON: https://www.w3.org/TR/webauthn-2/#dictionary-client-data
-    // TODO: exported challenge should NOT be extracted from clientDataJSON
-    var extracted_challenge = clientDataJSON.slice(36,36+43);
-    var client_data_json_len = clientDataJSON.byteLength;
-
-    noirInput = {
-        authenticator_data: new Uint8Array(authenticatorData),
-        client_data_json_len: client_data_json_len,
-        client_data_json: new Uint8Array(paddedClientDataJSON),
-        signature: new Uint8Array(extracted_signature),
-        challenge: new Uint8Array(extracted_challenge),
-        pub_key_x: new Uint8Array(pub_key_x),
-        pub_key_y: new Uint8Array(pub_key_y)
-    };
-    console.log(noirInput);
-
-    // Display values
-    // prettyPrintUintArray("authenticatorData", authenticatorData);
-    // prettyPrintUintArray("clientDataJSON", paddedClientDataJSON);
-    // prettyPrintUintArray("signature", extracted_signature);
-    // prettyPrintUintArray("extracted_challenge", extracted_challenge);
-    // prettyPrintUintArray("challenge", challenge);
-    // prettyPrintUintArray("pub_key_x", pub_key_x);
-    // prettyPrintUintArray("pub_key_y", pub_key_y);
-}
-
-const prove = async () => {
-    // Circuit tools setup
-    const backend = new BarretenbergBackend(circuit);
-    console.log("hi...");
-    // const verificationKey = await backend.getVerificationKey();
-    const verificationKey = await backend.getVerificationKey();
-    console.log("...oké");
-
-    /////// LOCAL PROOF CREATION /////////
-    // Proving
-    const noir = new Noir(circuit, backend);
-    const proof = await noir.generateProof(noirInput);
-    var jsonProof = JSON.stringify({
-        ...proof,
-        proof: Array.from(proof.proof)
-    });
-    fs.writeFileSync('../proofs/proof.json', jsonProof);
-    fs.writeFileSync('../proofs/vkey', verificationKey);
 }
 
 const signAndSend = async () => {
@@ -320,10 +157,10 @@ const signAndSend = async () => {
                 <button @click="signAndSend">Sign & send TX</button>
             </div>
             <div class="flex justify-center my-8">
-                <button @click="webAuthn">webAuthn</button>
+                <button @click="doWebAuthn">webAuthn</button>
             </div>
             <div class="flex justify-center my-8">
-                <button @click="prove">Prove webAuthn</button>
+                <button @click="doProve">Prove webAuthn</button>
             </div>
         </template>
     </div>
@@ -369,3 +206,4 @@ canvas.success {}
     }
 }
 </style>
+./prover.test
