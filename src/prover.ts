@@ -3,7 +3,7 @@ import { InputMap, Noir } from '@noir-lang/noir_js';
 
 import webAuthnCircuit from "./webauthn.json";
 
-export const prove = async (noirInput: InputMap) => {
+export const proveECDSA = async (noirInput: InputMap) => {
     // Circuit tools setup
     const backend = new BarretenbergBackend(webAuthnCircuit, { threads: 4 });
     console.log("hi...");
@@ -15,10 +15,22 @@ export const prove = async (noirInput: InputMap) => {
     // Proving
     const noir = new Noir(webAuthnCircuit, backend);
     const proof = await noir.generateProof(noirInput);
-    var jsonProof = JSON.stringify({
-        ...proof,
+    return JSON.stringify({
+        publicInputs: proof.publicInputs,
         proof: Array.from(proof.proof)
     });
-    // fs.writeFileSync('../proofs/proof.json', jsonProof);
-    // fs.writeFileSync('../proofs/vkey', verificationKey);
+}
+
+export const proveSmile = async () => {
+    // TODO
+    console.warn("Not implemented yet");
+    await new Promise((resolve) => setTimeout(resolve, 3000));
+    return "";
+}
+
+export const proveERC20Transfer = async () => {
+    // TODO
+    console.warn("Not implemented yet");
+    await new Promise((resolve) => setTimeout(resolve, 1000));
+    return "";
 }
