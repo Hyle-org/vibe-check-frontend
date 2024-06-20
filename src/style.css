@@ -8,17 +8,4 @@
         --color-secondary: 245 245 245;
         --color-secondary-darker: 225 225 225;
     }
-
-    html {
-        @apply font-garamond font-normal;
-    }
-
-    h1,
-    h2,
-    h3,
-    h4,
-    h5,
-    h6 {
-        @apply font-anton uppercase;
-    }
 }
