@@ -33,16 +33,27 @@ export async function setupCosmos(address: string) {
     );
 }
 
-export async function broadcastTx() {
-    //const msg = MsgExecuteStateChanges.create();
+export async function broadcastTx(
+    ecdsaProof: string,
+    smileProof: string,
+    erc20Proof: string,
+) {
     const msgAny = {
         typeUrl: "/hyle.zktx.v1.MsgExecuteStateChanges",
         value: {
             stateChanges: [
                 {
-                    contractName: "toto",
-                    proof: new Uint8Array(),
-                }
+                    contractName: "ecdsa_secp256r1",
+                    proof: window.btoa(ecdsaProof),
+                },
+                {
+                    contractName: "smile",
+                    proof: window.btoa(smileProof),
+                },
+                {
+                    contractName: "erc20",
+                    proof: window.btoa(erc20Proof),
+                },
             ],
         }
     };

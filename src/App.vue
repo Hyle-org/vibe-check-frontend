@@ -1,8 +1,8 @@
 <script setup lang="ts">
 import * as faceApi from "face-api.js";
-import { nextTick, onMounted, ref, watchEffect } from "vue";
-import { webAuthn } from "./webauthn";
-import { prove } from "./prover";
+import { computed, nextTick, onMounted, ref, watchEffect } from "vue";
+import { needWebAuthnCredentials, registerWebAuthnIfNeeded, signChallengeWithWebAuthn } from "./webauthn";
+import { proveECDSA, proveSmile, proveERC20Transfer } from "./prover";
 import { setupCosmos, broadcastTx, checkTxStatus } from "./cosmos";
 
 import Logo from "./assets/Hyle_logo.svg";
@@ -16,6 +16,12 @@ const screenshotOutput = ref<HTMLCanvasElement | null>(null);
 const screenshotData = ref<string | null>(null);
 const detectionTimer = ref<unknown | null>(null);
 const lastDetections = ref<faceApi.FaceDetection[]>([]);
+
+const vibeCheckStatus = ref<"failed_vibe" | "success_vibe" | null>(null);
+
+const ecdsaPromiseDone = ref<boolean>(false);
+const smilePromiseDone = ref<boolean>(false);
+const erc20PromiseDone = ref<boolean>(false);
 
 // General state machine state
 const status = ref<string>("start");
@@ -41,17 +47,23 @@ watchEffect(() => {
         failed_vibe: "screenshot",
         success_vibe: "screenshot",
 
+        proving: "proving",
+        checking_tx: "proving",
+        failed_at_proving: "proving",
+
+        tx_success: "proving",
+        tx_failure: "proving",
     } as any;
     if (statusToScreen[status.value] !== screen.value)
         screen.value = statusToScreen[status.value];
 });
 
-const noirInput = ref<unknown | null>(null);
-
 onMounted(async () => {
     // For some reason this fails if done too early
     await faceApi.nets.tinyFaceDetector.loadFromUri("/models");
 });
+
+const hasDetection = computed(() => lastDetections.value.length > 0);
 
 const zoomInOnBox = async (canvas, img, x, y, width, height, steps) => {
     await new Promise((resolve) => {
@@ -79,35 +91,38 @@ const zoomInOnBox = async (canvas, img, x, y, width, height, steps) => {
 
 const doWebAuthn = async () => {
     status.value = "pre-authenticating";
-    // Wait 2s
-    await new Promise((resolve) => setTimeout(resolve, 2000));
-    status.value = "authenticating";
-    try {
-        noirInput.value = await webAuthn();
-        status.value = "authenticated";
-
+    if (needWebAuthnCredentials()) {
+        // Wait 2s
+        await new Promise((resolve) => setTimeout(resolve, 2000));
+        status.value = "authenticating";
         try {
-            const stream = await navigator.mediaDevices.getUserMedia({ video: true, audio: false });
-            videoFeed.value!.srcObject = stream;
-            videoFeed.value!.play();
-            nextTick(() => status.value = "camera_playing");
-            detectionTimer.value = setInterval(async () => {
-                const displaySize = { width: videoFeed.value!.clientWidth, height: videoFeed.value!.clientHeight }
-                faceApi.matchDimensions(canvasOutput.value!, displaySize)
-                lastDetections.value = await faceApi.detectAllFaces(videoFeed.value!, new faceApi.TinyFaceDetectorOptions())
-                const resizedDetections = faceApi.resizeResults(lastDetections.value, displaySize)
-                faceApi.draw.drawDetections(canvasOutput.value!, resizedDetections);
-            }, 1000);
+            await registerWebAuthnIfNeeded();
+            status.value = "authenticated";
         } catch (e) {
             console.error(e);
             error.value = `${e}`;
-            status.value = "failed_camera";
-        };
+            status.value = "failed_authentication";
+        }
+    } else {
+        status.value = "authenticated";
+    }
+    try {
+        const stream = await navigator.mediaDevices.getUserMedia({ video: true, audio: false });
+        videoFeed.value!.srcObject = stream;
+        videoFeed.value!.play();
+        nextTick(() => status.value = "camera_playing");
+        detectionTimer.value = setInterval(async () => {
+            const displaySize = { width: videoFeed.value!.clientWidth, height: videoFeed.value!.clientHeight }
+            faceApi.matchDimensions(canvasOutput.value!, displaySize)
+            lastDetections.value = await faceApi.detectAllFaces(videoFeed.value!, new faceApi.TinyFaceDetectorOptions())
+            const resizedDetections = faceApi.resizeResults(lastDetections.value, displaySize)
+            faceApi.draw.drawDetections(canvasOutput.value!, resizedDetections);
+        }, 1000);
     } catch (e) {
         console.error(e);
         error.value = `${e}`;
-        status.value = "failed_authentication";
-    }
+        status.value = "failed_camera";
+    };
 }
 
 const takeScreenshot = async () => {
@@ -131,42 +146,69 @@ const takeScreenshot = async () => {
 };
 
 const checkVibe = () => {
+    vibeCheckStatus.value = null;
     status.value = "checking_vibe";
 
     // TODO: do this for real
     if (Math.random() > 0.5) {
         setTimeout(() => {
+            vibeCheckStatus.value = "failed_vibe";
             status.value = "failed_vibe";
         }, 1000);
     } else {
         setTimeout(() => {
+            vibeCheckStatus.value = "success_vibe";
             status.value = "success_vibe";
         }, 1000);
     }
 }
 
-const doProve = async () => {
-    prove(noirInput.value);
-}
-
-const prepareTx = () => {
-    return {
-        tx_bytes: "0x1234",
-        mode: "BROADCAST_MODE_SYNC",
-    };
-}
-
 const signAndSend = async () => {
-    const tx = prepareTx()
-    // Show relevant details to the user
-    // Sign the transaction
+    ecdsaPromiseDone.value = false;
+    smilePromiseDone.value = false;
+    erc20PromiseDone.value = false;
+    status.value = "proving";
 
-    // Send the transaction
-    await setupCosmos("http://localhost:26657");
-    const resp = await broadcastTx();
-    setTimeout(async () => console.log(await checkTxStatus(resp.transactionHash)), 1000);
+    try {
+        // Start locally proving that we are who we claim to be by signing the transaction hash
+        // TODO: this is currently a random challenge
+        const noirInput = await signChallengeWithWebAuthn();
+        const ecdsaPromise = proveECDSA(noirInput);
+        // Send the proof of smile to Giza or something
+        const smilePromise = proveSmile();
+        // Locally or backend prove an erc20 transfer
+        const erc20Promise = proveERC20Transfer(/* Parse 'origin' from the noir proof ? */);
 
-    // Switch to waiter view
+        ecdsaPromise.then(() => ecdsaPromiseDone.value = true);
+        smilePromise.then(() => smilePromiseDone.value = true);
+        erc20Promise.then(() => erc20PromiseDone.value = true);
+
+        // Send the transaction
+        await setupCosmos("http://localhost:26657");
+        const resp = await broadcastTx(
+            await ecdsaPromise,
+            await smilePromise,
+            await erc20Promise,
+        );
+        // Switch to waiter view
+        status.value = "checking_tx";
+
+        // Wait a bit and assume TX will be processed
+        await new Promise((resolve) => setTimeout(resolve, 2000));
+
+        // Check the status of the TX
+        const txStatus = await checkTxStatus(resp.transactionHash);
+        if (txStatus.status === "success") {
+            status.value = "tx_success";
+        } else {
+            status.value = "tx_failure";
+            error.value = txStatus.error || "Unknown error";
+        }
+    } catch (e) {
+        console.error(e);
+        error.value = `${e}`;
+        status.value = "failed_at_proving";
+    }
 }
 </script>
 
@@ -181,7 +223,7 @@ const signAndSend = async () => {
                     <p class="text-center font-semibold font-anton mb-2">Authenticating via WebAuthn</p>
                     <p class="text-center">You will be asked to create a secure account<br />
                         using the secure enclave contained within your phone.</p>
-                    <i class="mt-4 m-auto spinner"></i>
+                    <i class="!mt-4 !m-auto !block spinner"></i>
                 </div>
                 <div v-else-if="status === 'failed_authentication'" class="p-10 bg-black bg-opacity-70 rounded-xl">
                     <p class="text-center font-semibold font-anton mb-2">There was an error authenticating</p>
@@ -194,13 +236,13 @@ const signAndSend = async () => {
                 </button>
             </div>
         </template>
-        <template v-else-if="screen === 'camera' || screen === 'screenshot'">
-            <!-- Have to do both at once or the refs won't work properly for the camera -> screnshot transition -->
-            <div v-show="screen === 'camera'">
+        <template v-else>
+            <!-- This case covers all of them because of the screenshotOutput canvas ref, which needs to have long enough lifetime -->
+            <div v-if="screen === 'camera'">
                 <div v-show="status === 'authenticated' || status === 'failed_camera'"
                     class="flex flex-col justify-center h-[400px] max-h-[50vh] max-w-[50rem] m-auto img-background p-10">
                     <div v-if="status === 'authenticated'">
-                        <i class="mt-4 m-auto spinner"></i>
+                        <i class="!mt-4 !m-auto !block spinner"></i>
                     </div>
                     <div v-if="status === 'failed_camera'" class="p-10 bg-black bg-opacity-70 rounded-xl">
                         <p class="text-center font-semibold font-anton mb-2">Camera couldn't be played</p>
@@ -214,12 +256,14 @@ const signAndSend = async () => {
                     </div>
                 </div>
                 <div class="flex justify-center my-8">
-                    <button @click="takeScreenshot" :disabled="status !== 'camera_playing'">Get Tokens</button>
+                    <button @click="takeScreenshot" :disabled="status !== 'camera_playing' || !hasDetection">Get
+                        Tokens</button>
                 </div>
             </div>
-            <div v-show="screen === 'screenshot'">
+            <div v-show="screen !== 'camera'"> <!-- screenshotOutput is also why I'm using show and not if -->
                 <div class="relative flex justify-center">
-                    <canvas :class="`mirror rounded overflow-hidden ${status}`" ref="screenshotOutput"></canvas>
+                    <canvas :class="`mirror rounded overflow-hidden ${vibeCheckStatus}`"
+                        ref="screenshotOutput"></canvas>
                     <div class="absolute top-0 w-full h-full flex justify-center items-center">
                         <p v-if="status === 'checking_vibe'" class="text-white font-semibold">
                             ...Checking your vibe...
@@ -230,53 +274,45 @@ const signAndSend = async () => {
                         <p v-else-if="status === 'success_vibe'" class="text-white font-semibold">
                             Vibe check passed. You are vibing.
                         </p>
+                        <div v-else-if="screen === 'proving' && status !== 'failed_at_proving'"
+                            class="text-white p-10 bg-black bg-opacity-50 rounded-xl flex flex-col gap-2">
+                            <p class="flex items-center">Generating ECDSA signature proof:
+                                <i v-if="!ecdsaPromiseDone" class="spinner"></i>
+                                <span v-else>✅</span>
+                                <span class="text-sm mt-1 text-opacity-80 italic">(this takes a while)</span>
+                            </p>
+                            <p class="flex items-center">Generating proof of smile: <i v-if="!smilePromiseDone"
+                                    class="spinner"></i><span v-else>✅</span></p>
+                            <p class="flex items-center">Generating ERC20 claim proof: <i v-if="!erc20PromiseDone"
+                                    class="spinner"></i><span v-else>✅</span></p>
+                            <p class="flex items-center">Sending TX: <i v-if="status === 'proving'"
+                                    class="spinner"></i><span v-else>✅</span></p>
+                            <div v-if="status === 'checking_tx'" class="flex flex-col justify-center items-center my-8">
+                                <i class="spinner"></i>
+                                <p class="italic">...TX sent, checking status...</p>
+                            </div>
+                            <div v-if="status === 'tx_success'" class="flex flex-col justify-center items-center my-8">
+                                <p class="text-center font-semibold font-anton uppercase mb-2">TX successful</p>
+                            </div>
+                            <div v-if="status === 'tx_failure'" class="flex flex-col justify-center items-center my-8">
+                                <p class="text-center font-semibold font-anton uppercase mb-2">TX failed</p>
+                                <p class="text-center text-sm font-mono">{{ error }}</p>
+                            </div>
+                        </div>
+                        <div v-else-if="status === 'failed_at_proving'"
+                            class="text-white p-10 bg-black bg-opacity-50 rounded-xl flex flex-col gap-2">
+                            <p class="text-center font-semibold font-anton uppercase mb-2">An error occured</p>
+                            <p class="text-center text-sm font-mono">{{ error }}</p>
+                        </div>
                     </div>
                 </div>
                 <div class="flex justify-center my-8">
-                    <button @click="signAndSend" :disabled="status !== 'failed_vibe' && status !== 'success_vibe'">Send
+                    <button @click="signAndSend"
+                        :disabled="status !== 'failed_vibe' && status !== 'success_vibe' && status !== 'failed_at_proving'">Send
                         TX</button>
                 </div>
             </div>
         </template>
-        <!--
-        <template v-else-if="status == 'signing'">
-            <p>TX Hash: 0x123134134134</p>
-            <p>Signed by public address 0x43990843.webAuthn</p>
-            <p>1 - Signing</p>
-            <p>2 - Sending</p>
-        </template>
-        <template v-else-if="status == 'recap'">
-            <p>TX <a>0x123134134134</a> has been sent!</p>
-            <p>Signed by public address 0x43990843.webAuthn</p>
-            <p>Leaderboard</p>
-        </template>
-        <template v-else>
-            <div class="flex justify-center">
-                <div :class="'rounded overflow-hidden mirror relative ' + (!screenshotData ? '' : 'hidden')">
-                    <video ref="videoFeed" autoplay></video>
-                    <canvas class="absolute top-0" ref="canvasOutput"></canvas>
-                </div>
-                <div :class="'relative ' + (!screenshotData ? 'hidden' : '')">
-                    <canvas :class="`mirror ${status}`" ref="screenshotOutput"></canvas>
-                    <div class="absolute top-0 w-full h-full flex justify-center items-center">
-                        <p class="text-white font-semibold">{{ fakeProcessingMessage }}</p>
-                    </div>
-                </div>
-            </div>
-            <div v-if="status != 'success' && status != 'failed'" class="flex justify-center my-8">
-                <button @click="takeScreenshot">Smile & get tokens</button>
-            </div>
-            <div v-else class="flex justify-center my-8">
-                <button @click="signAndSend">Sign & send TX</button>
-            </div>
-            <div class="flex justify-center my-8">
-                <button @click="doWebAuthn">webAuthn</button>
-            </div>
-            <div class="flex justify-center my-8">
-                <button @click="doProve">Prove webAuthn</button>
-            </div>
-        </template>
-        -->
     </div>
 </template>
 
@@ -330,7 +366,7 @@ button:disabled {
 
 i.spinner {
     @apply animate-spin;
-    @apply block border-4 border-t-4 border-secondary border-t-primary rounded-full w-4 h-4;
+    @apply inline-block border-4 border-t-4 border-secondary border-t-primary rounded-full w-4 h-4 mt-1 mx-1;
 }
 
 .mirror {

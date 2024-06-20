@@ -77,7 +77,26 @@ function prettyPrintUintArray(name: string, input: ArrayBufferLike) {
 // https://www.w3.org/TR/webauthn-2/#sctn-cryptographic-challenges
 var challenge = Uint8Array.from("0123456789abcdef0123456789abcdef", c => c.charCodeAt(0));
 
-export const webAuthn = async () => {
+export const needWebAuthnCredentials = () => {
+    try {
+        const locallyStoredId = JSON.parse(window.localStorage.getItem("credentials")!);
+        console.log("locallyStoredId", locallyStoredId);
+        return !Uint8Array.from(locallyStoredId.raw_id as Array<number>)
+    } catch (_) {
+        return true;
+    }
+}
+
+export const registerWebAuthnIfNeeded = async () => {
+    const storedId = (() => { try {
+        const locallyStoredId = window.localStorage.getItem("credentials");
+        return locallyStoredId ? Uint8Array.from(JSON.parse(locallyStoredId).raw_id as Array<number>) : null;
+    } catch (_) {}})();
+
+    if (storedId) {
+        return;
+    }
+
     const publicKey = {
         attestation: "none",
         authenticatorSelection: {
@@ -95,9 +114,25 @@ export const webAuthn = async () => {
     var credential = (await navigator.credentials.create({ publicKey: publicKey }) as PublicKeyCredential);
     var attestation = credential.response as AuthenticatorAttestationResponse;
 
+    // Apparently no need to store() for public key credentials?
+
+    //navigator.credentials.store(credential);
+    window.localStorage.setItem("credentials", JSON.stringify({
+        raw_id: Array.from(new Uint8Array(credential.rawId)),
+        public_key: Array.from(new Uint8Array(attestation.getPublicKey()!))
+    }));
+}
+
+export const signChallengeWithWebAuthn = async () => {
+    const locallyStoredId = window.localStorage.getItem("credentials")!;
+    const rawId = Uint8Array.from(JSON.parse(locallyStoredId).raw_id as Array<number>);
+    const publicKey = Uint8Array.from(JSON.parse(locallyStoredId).public_key as Array<number>);
+    
+    // We assume that the above cannot fail or there is a logic error in the code
+
     const getRequest = {
         allowCredentials: [
-            { id: credential.rawId, type: "public-key" }
+            { id: rawId, type: "public-key" }
         ],
         challenge: challenge,
         rpId: "localhost",
@@ -108,8 +143,9 @@ export const webAuthn = async () => {
 
     var assertion = (await navigator.credentials.get({ publicKey: getRequest }) as PublicKeyCredential).response as AuthenticatorAssertionResponse;
 
+    assertion.userHandle
     // Extract values from webauthn interactions
-    var pubKey = attestation.getPublicKey()!;
+    var pubKey = publicKey;
     var signature = assertion.signature;
     var clientDataJSON = assertion.clientDataJSON;
     var authenticatorData = assertion.authenticatorData;
