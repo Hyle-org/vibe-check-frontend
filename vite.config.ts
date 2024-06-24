@@ -2,6 +2,18 @@ import { defineConfig } from "vite";
 import vue from "@vitejs/plugin-vue";
 import copy from "rollup-plugin-copy";
 
+const wasmContentTypePlugin = {
+    name: "wasm-content-type-plugin",
+    configureServer(server: any) {
+        server.middlewares.use((req: any, res: any, next: any) => {
+            if (req.url.endsWith(".wasm")) {
+                res.setHeader("Content-Type", "application/wasm");
+            }
+            next();
+        });
+    },
+};
+
 // https://vitejs.dev/config/
 export default defineConfig({
     esbuild: {
@@ -27,10 +39,11 @@ export default defineConfig({
         vue(),
         copy({
             targets: [
-                { src: 'node_modules/**/*.wasm', dest: 'node_modules/.vite/dist' },
+                { src: 'node_modules/**/*.wasm', dest: 'node_modules/.vite/deps' },
             ],
             copySync: true,
             hook: 'buildStart',
         }),
+        wasmContentTypePlugin
     ],
 });
