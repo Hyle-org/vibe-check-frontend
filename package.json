@@ -27,7 +27,8 @@
     "rollup-plugin-copy": "^3.5.0",
     "typescript-eslint": "^7.12.0",
     "vue": "^3.4.21",
-    "vue-eslint-parser": "^9.4.3"
+    "vue-eslint-parser": "^9.4.3",
+    "vue-router": "4"
   },
   "devDependencies": {
     "@vitejs/plugin-vue": "^5.0.4",
