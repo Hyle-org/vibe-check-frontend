@@ -18,6 +18,11 @@ platinum-prover prove ./target/trace ./target/memory proof
 platinum-prover verify proof
 ```
 
+To build WASM package:
+```
+cargo install wasm-pack
+wasm-pack build --target web --release
+```
 
 WARNING!
 Errors are not handled the right way, sfyl (:

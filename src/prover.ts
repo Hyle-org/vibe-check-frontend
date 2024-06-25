@@ -44,8 +44,6 @@ export const proveERC20Transfer = async () => {
     let program_inputs = "[2 0 6451042 3 100 0 418430673765 5 0 99 0 6451042 3 0 7168376 5 2553248914692030785942303172119107100577416932040888712016243391667211221779]";
 
     let cairo_run_output = wasm_cairo_run(sierra,program_inputs);
-    console.log(cairo_run_output);
-    console.log("Starting to prove");
     let proof = wasm_prove(
         new Uint8Array(cairo_run_output.trace),
         new Uint8Array(cairo_run_output.memory),
