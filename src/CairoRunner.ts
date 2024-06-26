@@ -6,9 +6,18 @@ import proverInit, { wasm_prove } from "./prover-pkg/cairo_verifier.js";
 var cairoRunOutput: any;
 var setup: Promise<any>;
 
+export type ByteArray = string;
+export type CairoArgs = {
+    balances: { name: ByteArray; amount: number }[];
+    amount: number;
+    from: ByteArray;
+    to: ByteArray;
+    // Recalculated: hash: string;
+};
+
 onmessage = function (e) {
-    console.log("Worker started");
     if (e.data[0] === "run") {
+        console.log("Worker started");
         setup = runErc20(e.data[1]);
     } else if (e.data[0] === "prove") {
         proveRun().then((result) => {
@@ -22,6 +31,7 @@ async function runErc20(programInputs: string) {
     await runnerInit();
     await proverInit();
 
+    console.log("Running with inputs: ", programInputs);
     cairoRunOutput = wasm_cairo_run(sierra, programInputs);
 }
 

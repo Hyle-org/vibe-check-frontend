@@ -25,6 +25,7 @@
     "pkijs": "^3.1.0",
     "protobufjs": "^7.3.2",
     "rollup-plugin-copy": "^3.5.0",
+    "starknet": "^5.24.3",
     "typescript-eslint": "^7.12.0",
     "vue": "^3.4.21",
     "vue-eslint-parser": "^9.4.3",
