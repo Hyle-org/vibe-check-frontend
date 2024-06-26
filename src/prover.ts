@@ -2,6 +2,7 @@ import { BarretenbergBackend } from "@noir-lang/backend_barretenberg";
 import { InputMap, Noir } from "@noir-lang/noir_js";
 
 import webAuthnCircuit from "./webauthn.json";
+import { ByteArray, CairoArgs } from "./CairoRunner";
 
 export const proveECDSA = async (noirInput: InputMap) => {
     // Circuit tools setup
@@ -28,19 +29,44 @@ export const proveSmile = async () => {
     return "";
 };
 
-export const proveERC20Transfer = async () => {
+function serByteArray(arr: ByteArray): string {
+    if (arr.length > 31) {
+        throw new Error("ByteArray too long");
+    }
+    // Take each letter, encode as hex
+    return `0 ${BigInt(
+        "0x" +
+            arr
+                .split("")
+                .map((x) => x.charCodeAt(0).toString(16))
+                .join(""),
+    ).toString()} ${arr.length}`;
+}
+import { ec } from "starknet";
+
+// exported for testing
+export function computeArgs(args: CairoArgs): string {
+    const balances = args.balances.map((x) => `${serByteArray(x.name)} ${x.amount}`).join(" ");
+
+    let hash = [1, ...balances.split(" ")].reduce((acc, x) => {
+        return ec.starkCurve.pedersen(acc, +x); // Hope this doesn't overflow
+    });
+
+    return `[${args.balances.length} ${balances} ${args.amount} ${serByteArray(args.from)} ${serByteArray(args.to)} ${BigInt(hash).toString()}]`;
+}
+
+export const proveERC20Transfer = async (args: CairoArgs) => {
     const worker = new Worker(new URL("./CairoRunner.ts", import.meta.url), {
         type: "module",
     });
-    return await new Promise((resolve) => {
-        worker.onmessage = (e) => {
-            resolve(e);
-            worker.terminate();
-        };
-        worker.postMessage([
-            "run",
-            "[2 0 6451042 3 100 0 418430673765 5 0 99 0 6451042 3 0 7168376 5 2553248914692030785942303172119107100577416932040888712016243391667211221779]",
-        ]);
-        worker.postMessage(["prove"]);
-    });
+    return JSON.stringify(
+        await new Promise((resolve) => {
+            worker.onmessage = (e) => {
+                resolve(e);
+                worker.terminate();
+            };
+            worker.postMessage(["run", computeArgs(args)]);
+            worker.postMessage(["prove"]);
+        }),
+    );
 };

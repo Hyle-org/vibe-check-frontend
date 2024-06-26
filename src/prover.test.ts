@@ -1,5 +1,20 @@
 import { expect, test } from "bun:test";
-import { proveECDSA, proveERC20Transfer } from "./prover";
+import { computeArgs, proveECDSA, proveERC20Transfer } from "./prover";
+
+test("parse cairo args", () => {
+    expect(
+        computeArgs({
+            balances: [
+                { name: "alex", amount: 1 },
+                { name: "bryan", amount: 2 },
+            ],
+            amount: 3,
+            from: "cfof",
+            to: "daer",
+            hash: "hash",
+        }),
+    ).toEqual("[2 0 616c6578 4 1 0 627279616e 5 2 3 0 63666f66 4 0 64616572 4 hash]");
+});
 
 test(
     "ProveNoir",

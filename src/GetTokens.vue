@@ -3,7 +3,7 @@ import * as faceApi from "face-api.js";
 import { computed, nextTick, onMounted, ref, watchEffect } from "vue";
 import { needWebAuthnCredentials, registerWebAuthnIfNeeded, signChallengeWithWebAuthn } from "./webauthn";
 import { proveECDSA, proveSmile, proveERC20Transfer } from "./prover";
-import { setupCosmos, broadcastTx, checkTxStatus } from "./cosmos";
+import { setupCosmos, broadcastTx, checkTxStatus, ensureContractsRegistered } from "./cosmos";
 
 import Logo from "./assets/Hyle_logo.svg";
 
@@ -61,6 +61,8 @@ watchEffect(() => {
 onMounted(async () => {
     // For some reason this fails if done too early
     await faceApi.nets.tinyFaceDetector.loadFromUri("/models");
+    await setupCosmos("http://localhost:26657");
+    await ensureContractsRegistered();
 });
 
 const hasDetection = computed(() => lastDetections.value.length > 0);
@@ -177,14 +179,22 @@ const signAndSend = async () => {
         // Send the proof of smile to Giza or something
         const smilePromise = proveSmile();
         // Locally or backend prove an erc20 transfer
-        const erc20Promise = proveERC20Transfer(/* Parse 'origin' from the noir proof ? */);
+        const erc20Promise = proveERC20Transfer({
+            balances: [
+                { name: "alex", amount: 1 },
+                { name: "bryan", amount: 2 },
+            ],
+            amount: 3,
+            from: "cfof",
+            to: "daer",
+            hash: "hash",
+        });
 
         ecdsaPromise.then(() => ecdsaPromiseDone.value = true);
         smilePromise.then(() => smilePromiseDone.value = true);
         erc20Promise.then(() => erc20PromiseDone.value = true);
 
         // Send the transaction
-        await setupCosmos("http://localhost:26657");
         const resp = await broadcastTx(
             await ecdsaPromise,
             await smilePromise,
