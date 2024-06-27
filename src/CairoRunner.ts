@@ -2,6 +2,7 @@
 import sierra from "./sierra.json";
 import runnerInit, { wasm_cairo_run } from "./runner-pkg/cairo_runner.js";
 import proverInit, { wasm_prove } from "./prover-pkg/cairo_verifier.js";
+import { ec } from "starknet";
 
 var cairoRunOutput: any;
 var setup: Promise<any>;
@@ -15,10 +16,43 @@ export type CairoArgs = {
     // Recalculated: hash: string;
 };
 
+export function serByteArray(arr: ByteArray): string {
+    if (arr.length > 31) {
+        throw new Error("ByteArray too long");
+    }
+    // Take each letter, encode as hex
+    return `0 ${BigInt(
+        "0x" +
+            arr
+                .split("")
+                .map((x) => x.charCodeAt(0).toString(16))
+                .join(""),
+    ).toString()} ${arr.length}`;
+}
+
+export function hashBalance(balances: { name: ByteArray; amount: number }[]): string {
+    const asString = balances.map((x) => `${serByteArray(x.name)} ${x.amount}`).join(" ");
+
+    return BigInt(
+        ["1", ...asString.split(" ")].reduce((acc, x) => {
+            return ec.starkCurve.pedersen(acc, x);
+        }),
+    ).toString();
+}
+
+// exported for testing
+export function computeArgs(args: CairoArgs): string {
+    const balances = args.balances.map((x) => `${serByteArray(x.name)} ${x.amount}`).join(" ");
+
+    let hash = hashBalance(args.balances);
+
+    return `[${args.balances.length} ${balances} ${args.amount} ${serByteArray(args.from)} ${serByteArray(args.to)} ${hash}]`;
+}
+
 onmessage = function (e) {
     if (e.data[0] === "run") {
         console.log("Worker started");
-        setup = runErc20(e.data[1]);
+        setup = runErc20(computeArgs(e.data[1]));
     } else if (e.data[0] === "prove") {
         proveRun().then((result) => {
             console.log("Worker job done");
@@ -43,8 +77,8 @@ async function proveRun() {
         new Uint8Array(cairoRunOutput.memory),
         cairoRunOutput.output,
     );
-    return JSON.stringify({
+    return {
         output: cairoRunOutput.output,
         proof: proof,
-    });
+    };
 }
