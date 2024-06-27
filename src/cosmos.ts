@@ -7,6 +7,7 @@ import { TxRaw } from "cosmjs-types/cosmos/tx/v1beta1/tx";
 // for the types you care about. How this is done should be documented, but is not yet:
 // https://github.com/cosmos/cosmjs/issues/640
 import { MsgExecuteStateChanges, MsgRegisterContract } from "./proto/tx.ts";
+import { hashBalance, serByteArray } from "./CairoRunner.ts";
 
 const mnemonic =
     "surround miss nominee dream gap cross assault thank captain prosper drop duty group candy wealth weather scale put";
@@ -84,6 +85,17 @@ export async function ensureContractsRegistered() {
         return;
     }
 
+    const initialBalanceHash = hashBalance([
+        {
+            name: "faucet",
+            amount: 1000000,
+        },
+    ]);
+    console.log(
+        "initialBalanceHash",
+        initialBalanceHash,
+        initialBalanceHash.split("").map((x) => x.charCodeAt(0)),
+    );
     let msgAny = {
         typeUrl: "/hyle.zktx.v1.MsgRegisterContract",
         value: {
@@ -91,7 +103,7 @@ export async function ensureContractsRegistered() {
             verifier: "cairo",
             contractName: "smile_token",
             programId: new Uint8Array([213]),
-            stateDigest: new Uint8Array([0]), // TODO
+            stateDigest: new Uint8Array(initialBalanceHash.split("").map((x) => x.charCodeAt(0))),
         } as MsgRegisterContract,
     };
     const fee = {
@@ -125,5 +137,5 @@ export async function ensureContractsRegistered() {
         sequence: 2,
         chainId: "hyle",
     });
-    client.broadcastTx(Uint8Array.from(TxRaw.encode(signedTx).finish()));
+    await client.broadcastTx(Uint8Array.from(TxRaw.encode(signedTx).finish()));
 }
