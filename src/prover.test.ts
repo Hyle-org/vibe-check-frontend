@@ -62,8 +62,11 @@ test(
             complement_bytes.push(parseInt(cms.slice(i, i + 2), 16));
         }
         noirInput.signature = noirInput.signature.slice(0, 32).concat(complement_bytes);
-
-        expect(await proveECDSA(noirInput)).toBeTruthy();
+        let res = await proveECDSA(noirInput);
+        expect(res).toBeTruthy();
+        expect(res.challenge).toEqual(
+            "0123456789abcdef0123456789abcdef",
+        );
     },
     // Takes 13 seconds on my PC
     30 * 1000,

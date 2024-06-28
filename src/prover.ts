@@ -6,20 +6,19 @@ import webAuthnCircuit from "./webauthn.json";
 export const proveECDSA = async (noirInput: InputMap) => {
     // Circuit tools setup
     const backend = new BarretenbergBackend(webAuthnCircuit, { threads: 4 });
-    console.log("hi...");
-    // const verificationKey = await backend.getVerificationKey();
-    // const verificationKey = await backend.getVerificationKey();
-    console.log("...oké");
-
-    /////// LOCAL PROOF CREATION /////////
     // Proving
     const noir = new Noir(webAuthnCircuit, backend);
-    const proof = await noir.generateProof(noirInput);
-    return JSON.stringify({
-        publicInputs: proof.publicInputs,
-        proof: Array.from(proof.proof),
-    });
-};
+    let res = await noir.generateProof(noirInput);
+
+    var challenge = '';
+    for (var i = 0; i < res.publicInputs.length; i += 1)
+        challenge += String.fromCharCode(parseInt(res.publicInputs[i].slice(-2), 16));
+
+    return {
+        challenge: Buffer.from(challenge, 'base64').toString('binary'),
+        proof: res.proof,
+    };
+}
 
 export const proveSmile = async () => {
     // TODO
