@@ -22,13 +22,6 @@ export const proveECDSA = async (noirInput: InputMap) => {
     });
 };
 
-export const proveSmile = async () => {
-    // TODO
-    console.warn("Not implemented yet");
-    await new Promise((resolve) => setTimeout(resolve, 3000));
-    return "";
-};
-
 export const proveERC20Transfer = async (args: CairoArgs): Promise<Uint8Array> => {
     const worker = new Worker(new URL("./CairoRunner.ts", import.meta.url), {
         type: "module",
@@ -40,10 +33,24 @@ export const proveERC20Transfer = async (args: CairoArgs): Promise<Uint8Array> =
             reject(e);
         };
         worker.onmessage = (e) => {
-            resolve(e.data.proof);
+            resolve(e.data.proof);            
             worker.terminate();
         };
-        worker.postMessage(["run", args]);
-        worker.postMessage(["prove"]);
+        worker.postMessage(["run-erc20", args]);
+        worker.postMessage(["prove-erc20"]);
+    });
+};
+
+export const proveSmile = async (args: string) => {
+    const worker = new Worker(new URL("./CairoRunner.ts", import.meta.url), {
+        type: "module",
+    });
+    return await new Promise((resolve) => {
+        worker.onmessage = (e) => {
+            resolve(e);
+            worker.terminate();
+        };
+        worker.postMessage(["run-smile", args]);
+        worker.postMessage(["prove-smile"]);
     });
 };
