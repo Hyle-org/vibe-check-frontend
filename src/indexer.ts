@@ -32,7 +32,7 @@ class WebSocketConnection {
             this.ws.onopen = () => {
                 this.reconnectAttempts = 0; // Reset reconnect attempts on successful connection
                 resolve();
-            }
+            };
         });
         await this.opened;
 
@@ -41,7 +41,7 @@ class WebSocketConnection {
 
     private async attemptReconnect() {
         if (this.reconnectAttempts < 3) {
-            await new Promise(resolve => setTimeout(resolve, Math.pow(2, this.reconnectAttempts) * 1000));
+            await new Promise((resolve) => setTimeout(resolve, Math.pow(2, this.reconnectAttempts) * 1000));
             this.reconnectAttempts++;
             await this.connectWebSocket();
         } else {
@@ -63,7 +63,7 @@ export type Tx = {
     height: number;
     txhash: string;
     tx: any;
-}
+};
 
 class JSONRpcClient extends WebSocketConnection {
     private idCounter: number = 1;
@@ -92,25 +92,29 @@ class JSONRpcClient extends WebSocketConnection {
 
     private async search(query: string, handler: (result: any) => void) {
         const total_count = await new Promise<number>((resolve) => {
-            this.call('tx_search', { query, per_page: `${this.MAX_PAGE_SIZE}`, order_by: 'desc' }, (result) => {
+            this.call("tx_search", { query, per_page: `${this.MAX_PAGE_SIZE}`, order_by: "desc" }, (result) => {
                 handler(result);
                 this.onNewTx(this);
                 resolve(+result.total_count);
-            })
+            });
         });
         // Search results are paginated, so we need to fetch all pages
         for (let i = 1; i * this.MAX_PAGE_SIZE < total_count; i++) {
             // await new Promise((resolve) => setTimeout(resolve, 1000));
-            this.call('tx_search', { query, page: `${i+1}`, per_page: `${this.MAX_PAGE_SIZE}`, order_by: 'desc' }, async (result) => {
-                handler(result);
-                // This is pessimistic but whatever.
-                this.onNewTx(this);
-            });
-        };
+            this.call(
+                "tx_search",
+                { query, page: `${i + 1}`, per_page: `${this.MAX_PAGE_SIZE}`, order_by: "desc" },
+                async (result) => {
+                    handler(result);
+                    // This is pessimistic but whatever.
+                    this.onNewTx(this);
+                },
+            );
+        }
     }
 
     private subscribe(query: string) {
-        return this.call('subscribe', { query }, result => {
+        return this.call("subscribe", { query }, (result) => {
             if (!result.data?.value?.TxResult) {
                 this.onNewTx(this);
                 return;
@@ -131,11 +135,13 @@ class JSONRpcClient extends WebSocketConnection {
         // TODO: It's possible that we actually miss some TX between subscribe and search
         // but that's fine for now.
         this.search(query, (result) => {
-            this.queuedResults.push(...result.txs.map((tx: any) => ({
-                height: tx.height,
-                txhash: tx.hash,
-                tx: tx.tx,
-            })));
+            this.queuedResults.push(
+                ...result.txs.map((tx: any) => ({
+                    height: tx.height,
+                    txhash: tx.hash,
+                    tx: tx.tx,
+                })),
+            );
         });
     }
 
@@ -144,8 +150,7 @@ class JSONRpcClient extends WebSocketConnection {
     }
 }
 
-
-function base64ToUint8Array(base64: string): Uint8Array {
+export function base64ToUint8Array(base64: string): Uint8Array {
     const binaryString = atob(base64);
     const len = binaryString.length;
     const bytes = new Uint8Array(len);
@@ -155,31 +160,32 @@ function base64ToUint8Array(base64: string): Uint8Array {
     return bytes;
 }
 
-
 import { ref } from "vue";
-import { MsgExecuteStateChanges, MsgRegisterContract } from "./proto/tx.ts"; 
+import { MsgExecuteStateChanges, MsgRegisterContract } from "./proto/tx.ts";
 import { Tx as CosmosTx } from "cosmjs-types/cosmos/tx/v1beta1/tx";
 
-export async function GetAllStateChanges() {
-    const client =  await JSONRpcClient.connect("ws://localhost:26657/websocket");
+export function GetAllStateChanges() {
+    let messages = ref(
+        [] as {
+            height: number;
+            txhash: string;
+            messages: MsgExecuteStateChanges;
+        }[],
+    );
 
-    let messages = ref([] as {
-        height: number;
-        txhash: string;
-        messages: MsgExecuteStateChanges;
-    }[]);
-
-    client.searchAndSubscribe("message.action='/hyle.zktx.v1.MsgExecuteStateChanges'", (client) => {
-        messages.value = [];
-        const results = client.getResults();
-        results.map((tx) => {
-            const txRaw = base64ToUint8Array(tx.tx);
-            const txData = CosmosTx.decode(txRaw);
-            txData.body?.messages?.map((msg) => {
-                messages.value.push({
-                    height: tx.height,
-                    txhash: tx.txhash,
-                    messages: MsgExecuteStateChanges.decode(msg.value),
+    JSONRpcClient.connect("ws://localhost:26657/websocket").then((client) => {
+        client.searchAndSubscribe("message.action='/hyle.zktx.v1.MsgExecuteStateChanges'", (client) => {
+            messages.value = [];
+            const results = client.getResults();
+            results.map((tx) => {
+                const txRaw = base64ToUint8Array(tx.tx);
+                const txData = CosmosTx.decode(txRaw);
+                txData.body?.messages?.map((msg) => {
+                    messages.value.push({
+                        height: tx.height,
+                        txhash: tx.txhash,
+                        messages: MsgExecuteStateChanges.decode(msg.value),
+                    });
                 });
             });
         });
@@ -189,11 +195,13 @@ export async function GetAllStateChanges() {
 }
 
 export function GetAllContractRegistrations() {
-    let registerMsgs = ref([] as {
-        height: number;
-        txhash: string;
-        messages: MsgRegisterContract;
-    }[]);
+    let registerMsgs = ref(
+        [] as {
+            height: number;
+            txhash: string;
+            messages: MsgRegisterContract;
+        }[],
+    );
 
     (async () => {
         const client = await JSONRpcClient.connect("ws://localhost:26657/websocket");

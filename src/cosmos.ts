@@ -29,7 +29,22 @@ export async function setupCosmos(address: string) {
     });
 }
 
-export async function broadcastTx(ecdsaProof: string, smileProof: string, erc20Proof: string) {
+function uint8ArrayToBase64(array: Uint8Array): string {
+    if (typeof Buffer !== "undefined") return Buffer.from(array).toString("base64");
+    // Work around call stack issues with large arrays
+    const CHUNK_SIZE = 0x8000;
+    let index = 0;
+    const length = array.length;
+    let result = "";
+    while (index < length) {
+        const end = Math.min(length, index + CHUNK_SIZE);
+        result += String.fromCharCode.apply(null, array.slice(index, end));
+        index = end;
+    }
+    return btoa(result);
+}
+
+export async function broadcastTx(ecdsaProof: string, smileProof: string, erc20Proof: Uint8Array) {
     const msgAny = {
         typeUrl: "/hyle.zktx.v1.MsgExecuteStateChanges",
         value: {
@@ -43,7 +58,7 @@ export async function broadcastTx(ecdsaProof: string, smileProof: string, erc20P
                     proof: window.btoa(smileProof),
                 },*/ {
                     contractName: "smile_token",
-                    proof: global?.window?.btoa(erc20Proof) || Buffer.from(erc20Proof).toString("base64"),
+                    proof: uint8ArrayToBase64(erc20Proof),
                 },
             ],
         },
@@ -91,11 +106,6 @@ export async function ensureContractsRegistered() {
             amount: 1000000,
         },
     ]);
-    console.log(
-        "initialBalanceHash",
-        initialBalanceHash,
-        initialBalanceHash.split("").map((x) => x.charCodeAt(0)),
-    );
     let msgAny = {
         typeUrl: "/hyle.zktx.v1.MsgRegisterContract",
         value: {
