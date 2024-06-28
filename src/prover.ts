@@ -29,7 +29,7 @@ export const proveSmile = async () => {
     return "";
 };
 
-export const proveERC20Transfer = async (args: CairoArgs) => {
+export const proveERC20Transfer = async (args: CairoArgs): Promise<Uint8Array> => {
     const worker = new Worker(new URL("./CairoRunner.ts", import.meta.url), {
         type: "module",
     });

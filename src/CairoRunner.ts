@@ -33,11 +33,7 @@ export function serByteArray(arr: ByteArray): string {
 export function hashBalance(balances: { name: ByteArray; amount: number }[]): string {
     const asString = balances.map((x) => `${serByteArray(x.name)} ${x.amount}`).join(" ");
 
-    return BigInt(
-        ["1", ...asString.split(" ")].reduce((acc, x) => {
-            return ec.starkCurve.pedersen(acc, x);
-        }),
-    ).toString();
+    return BigInt(["1", ...asString.split(" ")].reduce((acc, x) => ec.starkCurve.pedersen(acc, BigInt(x)))).toString();
 }
 
 // exported for testing

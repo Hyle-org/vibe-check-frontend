@@ -1,9 +1,11 @@
 <script setup lang="ts">
+import { computed } from "vue";
 import Logo from "./assets/Hyle_logo.svg";
-import { GetAllContractRegistrations } from "./indexer";
+import { SmileTokenBalances } from "./SmileTokenIndexer";
 
-const contracts = GetAllContractRegistrations();
-
+const sortedBalances = computed(() => {
+    return Object.entries(SmileTokenBalances.value).sort((a, b) => b[1] - a[1]);
+});
 </script>
 
 <template>
@@ -12,7 +14,7 @@ const contracts = GetAllContractRegistrations();
         <h3 class="text-center my-4"><img :src="Logo" alt="Hylé logo" class="h-10 m-auto"></img></h3>
 
         <div>
-            <p v-for="contract in contracts" :key="contract.txhash">{{ contract }}</p>
+            <p v-for="balance in sortedBalances" :key="balance[0]">{{ balance[0] }}: {{ balance[1] }}</p>
         </div>
     </div>
 </template>

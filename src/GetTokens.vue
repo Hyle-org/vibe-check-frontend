@@ -6,6 +6,7 @@ import { proveECDSA, proveSmile, proveERC20Transfer } from "./prover";
 import { setupCosmos, broadcastTx, checkTxStatus, ensureContractsRegistered } from "./cosmos";
 
 import Logo from "./assets/Hyle_logo.svg";
+import { getBalances } from "./SmileTokenIndexer";
 
 // These are references to HTML elements
 const canvasOutput = ref<HTMLCanvasElement | null>(null);
@@ -180,14 +181,10 @@ const signAndSend = async () => {
         const smilePromise = proveSmile();
         // Locally or backend prove an erc20 transfer
         const erc20Promise = proveERC20Transfer({
-            balances: [
-                { name: "alex", amount: 1 },
-                { name: "bryan", amount: 2 },
-            ],
-            amount: 3,
-            from: "cfof",
-            to: "daer",
-            hash: "hash",
+            balances: getBalances(),
+            amount: 100,
+            from: "faucet",
+            to: "daer", // TODO: this should be the user's address
         });
 
         ecdsaPromise.then(() => ecdsaPromiseDone.value = true);
