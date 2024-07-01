@@ -1,5 +1,5 @@
 import { defineConfig } from "vite";
-import { nodePolyfills } from 'vite-plugin-node-polyfills'
+import { nodePolyfills } from "vite-plugin-node-polyfills";
 import vue from "@vitejs/plugin-vue";
 import copy from "rollup-plugin-copy";
 
@@ -18,32 +18,30 @@ const wasmContentTypePlugin = {
 // https://vitejs.dev/config/
 export default defineConfig({
     esbuild: {
-        target: 'esnext',
+        target: "esnext",
         supported: {
-            'top-level-await': true
+            "top-level-await": true,
         },
     },
     optimizeDeps: {
         esbuildOptions: {
-            target: 'esnext',
+            target: "esnext",
             supported: {
-                'top-level-await': true
+                "top-level-await": true,
             },
         },
     },
     build: {
-        sourcemap: 'inline',
+        sourcemap: "inline",
         minify: false,
-        target: 'esnext',
+        target: "esnext",
     },
     plugins: [
         vue(),
         copy({
-            targets: [
-                { src: 'node_modules/**/*.wasm', dest: 'node_modules/.vite/deps' },
-            ],
+            targets: [{ src: "node_modules/**/*.wasm", dest: "node_modules/.vite/deps" }],
             copySync: true,
-            hook: 'buildStart',
+            hook: "buildStart",
         }),
         wasmContentTypePlugin,
         nodePolyfills(),

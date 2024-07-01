@@ -4,9 +4,10 @@ import { computed, nextTick, onMounted, ref, watchEffect } from "vue";
 import { needWebAuthnCredentials, registerWebAuthnIfNeeded, signChallengeWithWebAuthn } from "./webauthn";
 import { proveECDSA, proveSmile, proveERC20Transfer } from "./prover";
 import { setupCosmos, broadcastTx, checkTxStatus, ensureContractsRegistered } from "./cosmos";
+import { getBalances } from "./SmileTokenIndexer";
 
 import Logo from "./assets/Hyle_logo.svg";
-import { getBalances } from "./SmileTokenIndexer";
+import extLink from "./assets/external-link-svgrepo-com.vue";
 
 // These are references to HTML elements
 const canvasOutput = ref<HTMLCanvasElement | null>(null);
@@ -109,6 +110,11 @@ const doWebAuthn = async () => {
     } else {
         status.value = "authenticated";
     }
+
+    await activateCamera();
+}
+
+const activateCamera = async () => {
     try {
         const stream = await navigator.mediaDevices.getUserMedia({ video: true, audio: false });
         videoFeed.value!.srcObject = stream;
@@ -166,6 +172,14 @@ const checkVibe = () => {
     }
 }
 
+const retryScreenshot = () => {
+    screenshotData.value = null;
+    lastDetections.value = [];
+    vibeCheckStatus.value = null;
+
+    status.value = "authenticated";
+    activateCamera();
+}
 
 const signAndSend = async () => {
     ecdsaPromiseDone.value = false;
@@ -179,7 +193,7 @@ const signAndSend = async () => {
         const webAuthnValues = await signChallengeWithWebAuthn();
         const ecdsaPromise = proveECDSA(webAuthnValues);
         // Send the proof of smile to Giza or something
-        const smilePromise = proveSmile();
+        const smilePromise = ecdsaPromise//proveSmile();
         // Locally or backend prove an erc20 transfer
         const erc20Promise = proveERC20Transfer({
             balances: getBalances(),
@@ -216,6 +230,15 @@ const signAndSend = async () => {
         console.error(e);
         error.value = `${e}`;
         status.value = "failed_at_proving";
+    }
+}
+
+const vTriggerScroll = {
+    mounted(el: HTMLDivElement) {
+        const maxHeight = el.parentElement!.clientHeight;
+        const targetHeight = el.clientHeight;
+        document.body.style.setProperty("--max-height", `${maxHeight}px`);
+        document.body.style.setProperty("--target-height", `${targetHeight}px`);
     }
 }
 </script>
@@ -283,28 +306,43 @@ const signAndSend = async () => {
                             Vibe check passed. You are vibing.
                         </p>
                         <div v-else-if="screen === 'proving' && status !== 'failed_at_proving'"
-                            class="text-white p-10 bg-black bg-opacity-50 rounded-xl flex flex-col gap-2">
-                            <p class="flex items-center">Generating ECDSA signature proof:
-                                <i v-if="!ecdsaPromiseDone" class="spinner"></i>
-                                <span v-else>✅</span>
-                                <span class="text-sm mt-1 text-opacity-80 italic">(this takes a while)</span>
-                            </p>
-                            <p class="flex items-center">Generating proof of smile: <i v-if="!smilePromiseDone"
-                                    class="spinner"></i><span v-else>✅</span></p>
-                            <p class="flex items-center">Generating ERC20 claim proof: <i v-if="!erc20PromiseDone"
-                                    class="spinner"></i><span v-else>✅</span></p>
-                            <p class="flex items-center">Sending TX: <i v-if="status === 'proving'"
-                                    class="spinner"></i><span v-else>✅</span></p>
-                            <div v-if="status === 'checking_tx'" class="flex flex-col justify-center items-center my-8">
-                                <i class="spinner"></i>
-                                <p class="italic">...TX sent, checking status...</p>
-                            </div>
-                            <div v-if="status === 'tx_success'" class="flex flex-col justify-center items-center my-8">
-                                <p class="text-center font-semibold font-anton uppercase mb-2">TX successful</p>
-                            </div>
-                            <div v-if="status === 'tx_failure'" class="flex flex-col justify-center items-center my-8">
-                                <p class="text-center font-semibold font-anton uppercase mb-2">TX failed</p>
-                                <p class="text-center text-sm font-mono">{{ error }}</p>
+                            class="text-white p-8 bg-black bg-opacity-50 rounded-xl overflow-hidden">
+                            <div :class="`relative scrollOnSuccess ${status}`">
+                                <div class="flex flex-col gap-2">
+                                    <p class="flex items-center">Generating ECDSA signature proof:
+                                        <i v-if="!ecdsaPromiseDone" class="spinner"></i>
+                                        <span v-else>✅</span>
+                                        <span class="text-sm mt-1 text-opacity-80 italic">(this takes a while)</span>
+                                    </p>
+                                    <p class="flex items-center">Generating proof of smile: <i v-if="!smilePromiseDone"
+                                            class="spinner"></i><span v-else>✅</span></p>
+                                    <p class="flex items-center">Generating ERC20 claim proof: <i
+                                            v-if="!erc20PromiseDone" class="spinner"></i><span v-else>✅</span></p>
+                                    <p class="flex items-center gap-1">Sending TX: <i v-if="status === 'proving'"
+                                            class="spinner"></i><span v-else>✅</span></p>
+                                    <div v-if="status === 'checking_tx'"
+                                        class="flex flex-col justify-center items-center my-8">
+                                        <i class="spinner"></i>
+                                        <p class="italic">...TX sent, checking status...</p>
+                                    </div>
+                                </div>
+                                <div v-if="status === 'tx_success'"
+                                    class="flex flex-col justify-center items-center py-16" v-trigger-scroll>
+                                    <p class="text-center font-semibold font-anton uppercase mb-2">TX successful</p>
+                                    <p class="text-center text-sm font-mono">You've earned 100 devnet Hylé. Good vibes!
+                                    </p>
+                                    <p class="text-center text-sm font-mono my-4">Check it out on
+                                        <a>
+                                            <extLink class="h-4 w-auto inline-block pr-1" />Hyléou
+                                        </a><br>or tweet about it
+                                        !
+                                    </p>
+                                </div>
+                                <div v-if="status === 'tx_failure'"
+                                    class="flex flex-col justify-center items-center my-8">
+                                    <p class="text-center font-semibold font-anton uppercase mb-2">TX failed</p>
+                                    <p class="text-center text-sm font-mono">{{ error }}</p>
+                                </div>
                             </div>
                         </div>
                         <div v-else-if="status === 'failed_at_proving'"
@@ -314,10 +352,11 @@ const signAndSend = async () => {
                         </div>
                     </div>
                 </div>
-                <div class="flex justify-center my-8">
+                <div class="flex justify-center my-8 gap-4">
                     <button @click="signAndSend"
                         :disabled="status !== 'failed_vibe' && status !== 'success_vibe' && status !== 'failed_at_proving'">Send
                         TX</button>
+                    <button @click="retryScreenshot" v-if="status === 'failed_vibe'">Retry</button>
                 </div>
             </div>
         </template>
@@ -351,6 +390,29 @@ canvas.success_vibe {}
 
     100% {
         filter: contrast(250%) grayscale(100%);
+    }
+}
+
+.scrollOnSuccess.tx_success {
+    bottom: 0px;
+    max-height: 500px;
+    animation: scrollOnSuccess 3s ease-in-out 2s forwards;
+}
+
+.scrollOnSuccess.tx_success div:first-child {
+    position: relative;
+    animation: scrollOnSuccess 3s ease-in-out 2s forwards;
+}
+
+@keyframes scrollOnSuccess {
+    0% {
+        bottom: 0px;
+        max-height: var(--max-height);
+    }
+
+    100% {
+        bottom: calc(var(--max-height) - var(--target-height));
+        max-height: var(--target-height);
     }
 }
 </style>

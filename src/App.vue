@@ -10,6 +10,11 @@ html {
     @apply font-garamond font-normal leading-snug;
 }
 
+
+body {
+    @apply bg-primary text-secondary font-garamond;
+}
+
 h1,
 h2,
 h3,
@@ -23,12 +28,16 @@ p {
     @apply font-garamond text-xl leading-6;
 }
 
-body {
-    @apply bg-primary text-white font-garamond;
-}
-
 h1 {
     @apply text-4xl;
+}
+
+a {
+    @apply border-b border-secondary cursor-pointer;
+}
+
+a:hover {
+    @apply text-primary border-primary;
 }
 
 button {
