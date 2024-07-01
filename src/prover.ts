@@ -3,23 +3,24 @@ import { Noir } from "@noir-lang/noir_js";
 import webAuthnCircuit from "./webauthn.json";
 import { CairoArgs } from "./CairoRunner";
 
-import * as crypto from 'crypto';
+import * as crypto from "crypto";
 
 const computeIdentity = (pub_key_x: number[], pub_key_y: number[]) => {
     if (pub_key_x.length !== 32 || pub_key_y.length !== 32) {
-        throw new Error('pub_key_x and pub_key_y size need to be 32bytes.');
+        throw new Error("pub_key_x and pub_key_y size need to be 32bytes.");
     }
     const publicKey = Buffer.concat([Buffer.from(pub_key_x), Buffer.from(pub_key_y)]);
-    const hash = crypto.createHash('sha256').update(publicKey).digest();
+    const hash = crypto.createHash("sha256").update(publicKey).digest();
     const result = hash.slice(-20);
-    const hexResult = Array.from(result).map(byte => byte.toString(16).padStart(2, '0'));
+    const hexResult = Array.from(result).map((byte) => byte.toString(16).padStart(2, "0"));
 
-    return hexResult.join("")+".ecdsa";
-}
+    return hexResult.join("") + ".ecdsa";
+};
 
 export const proveECDSA = async (webAuthnValues: Record<string, any>) => {
     const identity = computeIdentity(webAuthnValues.pub_key_x, webAuthnValues.pub_key_y);
-    const noirInput = { // TODO: remove generic values
+    const noirInput = {
+        // TODO: remove generic values
         version: 1,
         initial_state_len: 4,
         initial_state: [0, 0, 0, 0],
@@ -36,7 +37,7 @@ export const proveECDSA = async (webAuthnValues: Record<string, any>) => {
             signature: webAuthnValues.signature,
             pub_key_x: webAuthnValues.pub_key_x,
             pub_key_y: webAuthnValues.pub_key_y,
-        }
+        },
     };
 
     // Circuit tools setup
@@ -62,7 +63,7 @@ export const proveERC20Transfer = async (args: CairoArgs): Promise<Uint8Array> =
             reject(e);
         };
         worker.onmessage = (e) => {
-            resolve(e.data.proof);            
+            resolve(e.data.proof);
             worker.terminate();
         };
         worker.postMessage(["run-erc20", args]);
