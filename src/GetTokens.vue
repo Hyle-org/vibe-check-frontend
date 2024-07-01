@@ -1,5 +1,6 @@
 <script setup lang="ts">
 import * as faceApi from "face-api.js";
+import { SHA256, enc } from 'crypto-js';
 import { computed, nextTick, onMounted, ref, watchEffect } from "vue";
 import { needWebAuthnCredentials, registerWebAuthnIfNeeded, signChallengeWithWebAuthn } from "./webauthn";
 import { proveECDSA, proveSmile, proveERC20Transfer } from "./prover";
@@ -166,6 +167,20 @@ const checkVibe = () => {
     }
 }
 
+
+const computeIdentity = (pub_key_x: number[], pub_key_y: number[]) => {
+    if (pub_key_x.length !== 32 || pub_key_y.length !== 32) {
+        throw new Error('pub_key_x and pub_key_y size need to be 32bytes.');
+    }
+    const publicKey = new Uint8Array([...pub_key_x, ...pub_key_y]);
+    const hash = SHA256(publicKey).toString(enc.Hex);
+    const result = hash.slice(-20);
+    const hexResult = Array.from(result).map(byte => byte.toString(16).padStart(2, '0'));
+
+    return hexResult.join("")+".ecdsa";
+}
+
+
 const signAndSend = async () => {
     ecdsaPromiseDone.value = false;
     smilePromiseDone.value = false;
@@ -175,7 +190,27 @@ const signAndSend = async () => {
     try {
         // Start locally proving that we are who we claim to be by signing the transaction hash
         // TODO: this is currently a random challenge
-        const noirInput = await signChallengeWithWebAuthn();
+        const webAuthnValues = await signChallengeWithWebAuthn();
+        const identity = computeIdentity(webAuthnValues.pub_key_x, webAuthnValues.pub_key_y);
+        const noirInput = { // TODO: remove generic values
+            version: 1, 
+            initial_state_len: 4,
+            initial_state: [0, 0, 0, 0],
+            next_state_len: 4,
+            next_state: [0, 0, 0, 0],
+            identity_len: 46,
+            identity: identity,
+            tx_hash_len: 43,
+            tx_hash: webAuthnValues.challenge,
+            program_outputs: {
+                authenticator_data: webAuthnValues.authenticator_data,
+                client_data_json: webAuthnValues.client_data_json,
+                client_data_json_len: webAuthnValues.client_data_json_len,
+                signature: webAuthnValues.signature,
+                pub_key_x: webAuthnValues.pub_key_x,
+                pub_key_y: webAuthnValues.pub_key_y,
+            }
+        };
         const ecdsaPromise = proveECDSA(noirInput);
         // Send the proof of smile to Giza or something
         const smilePromise = proveSmile();

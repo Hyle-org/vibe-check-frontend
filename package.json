@@ -16,6 +16,7 @@
     "@noir-lang/noir_js": "^0.30.0",
     "@types/eslint__js": "^8.42.3",
     "asn1.js": "^5.4.1",
+    "crypto-js": "^4.2.0",
     "dotenv": "^16.4.5",
     "eslint": "^9.4.0",
     "eslint-config-prettier": "^9.1.0",
