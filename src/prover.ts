@@ -7,12 +7,7 @@ import { ByteArray, CairoArgs } from "./CairoRunner";
 export const proveECDSA = async (noirInput: InputMap) => {
     // Circuit tools setup
     const backend = new BarretenbergBackend(webAuthnCircuit, { threads: 4 });
-    console.log("hi...");
-    // const verificationKey = await backend.getVerificationKey();
-    // const verificationKey = await backend.getVerificationKey();
-    console.log("...oké");
 
-    /////// LOCAL PROOF CREATION /////////
     // Proving
     const noir = new Noir(webAuthnCircuit, backend);
     const proof = await noir.generateProof(noirInput);
@@ -45,7 +40,12 @@ export const proveSmile = async (args: string) => {
     const worker = new Worker(new URL("./CairoRunner.ts", import.meta.url), {
         type: "module",
     });
-    return await new Promise((resolve) => {
+    return await new Promise((resolve, reject) => {
+        worker.onerror = (e) => {
+            console.error(e);
+            worker.terminate();
+            reject(e);
+        };
         worker.onmessage = (e) => {
             resolve(e);
             worker.terminate();
