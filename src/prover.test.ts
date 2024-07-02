@@ -1,6 +1,5 @@
 import { expect, test } from "bun:test";
 import { proveECDSA, proveERC20Transfer, proveSmile } from "./prover";
-import { computeArgs } from "./CairoRunner";
 
 const erc20Args = {
     balances: [
@@ -84,8 +83,7 @@ test(
 test(
     "ProveERC20Cairo",
     async () => {
-        let res = await proveERC20Transfer(erc20Args);
-        expect(res).toBeTruthy();
+        expect(await proveERC20Transfer(erc20Args)).toBeTruthy();
     },
     60 * 1000 * 10,
 );

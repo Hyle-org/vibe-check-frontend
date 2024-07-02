@@ -14,8 +14,8 @@ const computeIdentity = (pub_key_x: number[], pub_key_y: number[]) => {
     const result = hash.slice(-20);
     const hexResult = Array.from(result).map((byte) => byte.toString(16).padStart(2, "0"));
 
-    return hexResult.join("") + ".ecdsa";
-};
+    return hexResult.join("")+".ecdsa_secp256r1";
+}
 
 export const proveECDSA = async (webAuthnValues: Record<string, any>) => {
     const identity = computeIdentity(webAuthnValues.pub_key_x, webAuthnValues.pub_key_y);
@@ -26,7 +26,7 @@ export const proveECDSA = async (webAuthnValues: Record<string, any>) => {
         initial_state: [0, 0, 0, 0],
         next_state_len: 4,
         next_state: [0, 0, 0, 0],
-        identity_len: 46,
+        identity_len: 56,
         identity: identity,
         tx_hash_len: 43,
         tx_hash: webAuthnValues.challenge,
