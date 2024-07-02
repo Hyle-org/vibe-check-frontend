@@ -166,6 +166,7 @@ const checkVibe = () => {
     }
 }
 
+
 const signAndSend = async () => {
     ecdsaPromiseDone.value = false;
     smilePromiseDone.value = false;
@@ -175,8 +176,8 @@ const signAndSend = async () => {
     try {
         // Start locally proving that we are who we claim to be by signing the transaction hash
         // TODO: this is currently a random challenge
-        const noirInput = await signChallengeWithWebAuthn();
-        const ecdsaPromise = proveECDSA(noirInput);
+        const webAuthnValues = await signChallengeWithWebAuthn();
+        const ecdsaPromise = proveECDSA(webAuthnValues);
         // Send the proof of smile to Giza or something
         const smilePromise = proveSmile();
         // Locally or backend prove an erc20 transfer

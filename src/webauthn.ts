@@ -68,11 +68,6 @@ function padRightWithZeros(input: ArrayBufferLike): Uint8Array {
     return paddedArray;
 }
 
-
-function prettyPrintUintArray(name: string, input: ArrayBufferLike) {
-    console.log(name, " = ", "[", new Uint8Array(input).join(","), "]");
-}
-
 // Challenge should be 16bytes long
 // https://www.w3.org/TR/webauthn-2/#sctn-cryptographic-challenges
 var challenge = Uint8Array.from("0123456789abcdef0123456789abcdef", c => c.charCodeAt(0));
@@ -169,15 +164,4 @@ export const signChallengeWithWebAuthn = async () => {
         pub_key_x: Array.from(new Uint8Array(pub_key_x)),
         pub_key_y: Array.from(new Uint8Array(pub_key_y))
     };
-
-    // Display values
-    prettyPrintUintArray("authenticator_data", authenticatorData);
-    prettyPrintUintArray("client_data_json", paddedClientDataJSON);
-    console.log("client_data_json_len  =  ", client_data_json_len);
-    prettyPrintUintArray("signature", extracted_signature);
-    prettyPrintUintArray("extracted_challenge", extracted_challenge);
-    prettyPrintUintArray("challenge", challenge);
-    prettyPrintUintArray("pub_key_x", pub_key_x);
-    prettyPrintUintArray("pub_key_y", pub_key_y);
-    prettyPrintUintArray("pub_key", pubKey);
 }
