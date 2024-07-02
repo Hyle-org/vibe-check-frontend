@@ -1,4 +1,5 @@
 import { defineConfig } from "vite";
+import { nodePolyfills } from 'vite-plugin-node-polyfills'
 import vue from "@vitejs/plugin-vue";
 import copy from "rollup-plugin-copy";
 
@@ -44,6 +45,7 @@ export default defineConfig({
             copySync: true,
             hook: 'buildStart',
         }),
-        wasmContentTypePlugin
+        wasmContentTypePlugin,
+        nodePolyfills(),
     ],
 });
