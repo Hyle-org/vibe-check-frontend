@@ -52,6 +52,29 @@ export const proveECDSA = async (webAuthnValues: Record<string, any>) => {
     });
 };
 
+export type CairoSmileArgs = {
+    identity: number[],
+    image: number[]
+}
+
+export const runSmile = async (args: CairoSmileArgs): Promise<number> => {
+    const worker = new Worker(new URL("./CairoRunner.ts", import.meta.url), {
+        type: "module",
+    });
+    return await new Promise((resolve, reject) => {
+        worker.onerror = (e) => {
+            console.error(e);
+            worker.terminate();
+            reject(e);
+        };
+        worker.onmessage = (e) => {
+            resolve(e.data);
+            worker.terminate();
+        };
+        worker.postMessage(["run-smile", args]);
+    });
+};
+
 export const proveERC20Transfer = async (args: CairoArgs): Promise<Uint8Array> => {
     const worker = new Worker(new URL("./CairoRunner.ts", import.meta.url), {
         type: "module",

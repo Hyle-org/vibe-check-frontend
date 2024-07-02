@@ -2,7 +2,7 @@
 import * as faceApi from "face-api.js";
 import { computed, nextTick, onMounted, ref, watchEffect } from "vue";
 import { needWebAuthnCredentials, registerWebAuthnIfNeeded, signChallengeWithWebAuthn } from "./webauthn";
-import { proveECDSA, proveSmile, proveERC20Transfer } from "./prover";
+import { proveECDSA, proveSmile, proveERC20Transfer, runSmile } from "./prover";
 import { setupCosmos, broadcastTx, checkTxStatus, ensureContractsRegistered } from "./cosmos";
 import { getBalances } from "./SmileTokenIndexer";
 
@@ -15,7 +15,7 @@ const videoFeed = ref<HTMLVideoElement | null>(null);
 const screenshotOutput = ref<HTMLCanvasElement | null>(null);
 
 // Inner state of the screenshotting logic
-const screenshotData = ref<string | null>(null);
+const screenshotData = ref<ImageData | null>(null);
 const detectionTimer = ref<unknown | null>(null);
 const lastDetections = ref<faceApi.FaceDetection[]>([]);
 
@@ -71,9 +71,9 @@ const hasDetection = computed(() => lastDetections.value.length > 0);
 
 const zoomInOnBox = async (canvas, img, x, y, width, height, steps) => {
     await new Promise((resolve) => {
-        let currentStep = 0;
+        let currentStep = 5;
         const interval = setInterval(() => {
-            if (currentStep >= steps + 1) {
+            if (currentStep >= steps+1) {
                 clearInterval(interval);
                 resolve(null);
                 return;
@@ -144,22 +144,56 @@ const takeScreenshot = async () => {
     if (ctx) {
         ctx.drawImage(videoFeed.value!, 0, 0, canvas.width, canvas.height);
         screenshotData.value = await createImageBitmap(canvas);
+        
         const displaySize = { width: canvas.width, height: canvas.height }
         const resizedDetections = faceApi.resizeResults(lastDetections.value, displaySize)
         faceApi.draw.drawDetections(canvas, resizedDetections);
         status.value = "processing";
         // TODO: we should cheat here and send the image to giza right away.
         await zoomInOnBox(canvas, screenshotData.value!, resizedDetections[0].box.x, resizedDetections[0].box.y, resizedDetections[0].box.width, resizedDetections[0].box.height, 5);
-        checkVibe();
+
+        const small = document.createElement("canvas");
+        const smallCtx = small.getContext("2d")!;
+
+        smallCtx.drawImage(canvas, 0, 0, 48, 48);
+
+        checkVibe(smallCtx.getImageData(0, 0, 48, 48));
     }
 };
 
-const checkVibe = () => {
+const imageToGrayScale  = (image: ImageData): Float32Array => {
+    const data = image.data;
+
+    // Create a flattened array for grayscale values
+    const grayscaleArray = new Float32Array(image.width * image.height);
+
+    for (let i = 0, j = 0; i < data.length; i += 4, j++) {
+        // Convert RGB to grayscale using luminosity method
+        const r = data[i];
+        const g = data[i + 1];
+        const b = data[i + 2];
+        const grayscale = 0.21 * r + 0.72 * g + 0.07 * b;
+
+        // Store the grayscale value in the array
+        grayscaleArray[j] = Math.round(grayscale / 255 * 100000); // Normalized to [0, 1] and x100 000 for XGBoost inputs
+    }
+
+    return grayscaleArray;
+}
+
+const checkVibe = async (image: ImageData) => {
     vibeCheckStatus.value = null;
     status.value = "checking_vibe";
 
+    const grayScale = imageToGrayScale(image);
+
+    const isSmiling = await runSmile({
+        identity: [], // not used in the model
+        image: [...grayScale]
+    });
+    
     // TODO: do this for real
-    if (Math.random() > 0.5) {
+    if (isSmiling < 0.3) {
         setTimeout(() => {
             vibeCheckStatus.value = "failed_vibe";
             status.value = "failed_vibe";

@@ -4,6 +4,7 @@ import smileSierra from "./smile-sierra.json";
 import runnerInit, { wasm_cairo_run } from "./runner-pkg/cairo_runner.js";
 import proverInit, { wasm_prove } from "./prover-pkg/cairo_verifier.js";
 import { ec } from "starknet";
+import { CairoSmileArgs } from "./prover.js";
 
 var cairoERC20RunOutput: any;
 var cairoSmileRunOutput: any;
@@ -48,13 +49,53 @@ export function computeArgs(args: CairoArgs): string {
     return `[${args.balances.length} ${balances} ${args.amount} ${serByteArray(args.from)} ${serByteArray(args.to)} ${hash}]`;
 }
 
+export function computeSmileArgs(args: CairoSmileArgs): string {
+    const identity = "123";
+
+    return `[${identity} ${args.image.join(" ")}]`;
+}
+
+const sigmoid = (x: number) => {
+    return Math.exp(x) / (Math.exp(x) + 1)
+};
+  
 onmessage = function (e) {
     if (e.data[0] === "run-erc20") {
         console.log("ERC20 Worker started");
         setupErc20 = runErc20(computeArgs(e.data[1]));
     } else if (e.data[0] === "run-smile") {
         console.log("Smile Worker started");
-        setupSmile = runSmile(e.data[1]);
+        setupSmile = runSmile(computeSmileArgs(e.data[1])).then(result => {
+
+            console.log(result)
+            console.log(result.output)
+
+            // Get last parameter of the serialized HyleOutput struct
+            const last = result.output.split(" ").reverse()[0];
+
+            // Result to be processed with a Sigmoid function, so far, it outputs something like 3.65 * 10^75 => too high)
+            const res = +last.split("]")[0];
+            
+            // Send the vibe result to the main thread
+            this.postMessage({...result, vibe: res});
+/*
+            console.log("Start generating proof");
+
+            console.log(result)
+
+            let proof = wasm_prove(
+                new Uint8Array(result.trace),
+                new Uint8Array(result.memory),
+                result.output,
+            );
+
+            console.log(proof);
+            return {
+                output: result.output,
+                proof: proof,
+            };
+            */
+        });
     } else if (e.data[0] === "prove-erc20") {
         proveERC20Run().then((result) => {
             console.log("Worker job done");
@@ -75,25 +116,13 @@ async function runErc20(programInputs: string) {
     cairoERC20RunOutput = wasm_cairo_run(JSON.stringify(erc20Sierra), programInputs);
 }
 
-async function runSmile(programInputs: string) {
+async function runSmile(programInputs: string): any {
     await runnerInit();
     await proverInit();
 
-    cairoSmileRunOutput = wasm_cairo_run(JSON.stringify(smileSierra), programInputs);
-}
+    console.log("Running with inputs: ", programInputs);
+    return wasm_cairo_run(JSON.stringify(smileSierra), programInputs);
 
-async function proveERC20Run() {
-    await setupErc20;
-    console.log("Proving ERC20...");
-    let erc20Proof = wasm_prove(
-        new Uint8Array(cairoERC20RunOutput.trace),
-        new Uint8Array(cairoERC20RunOutput.memory),
-        cairoERC20RunOutput.output,
-    );
-    return {
-        output: cairoERC20RunOutput.output,
-        proof: erc20Proof,
-    };
 }
 
 async function proveSmileRun() {
