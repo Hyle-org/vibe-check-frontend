@@ -2,7 +2,7 @@
 import * as faceApi from "face-api.js";
 import { computed, nextTick, onMounted, ref, watchEffect } from "vue";
 import { needWebAuthnCredentials, registerWebAuthnIfNeeded, signChallengeWithWebAuthn } from "./webauthn";
-import { proveECDSA, proveSmile, proveERC20Transfer, runSmile } from "./prover";
+import { proveECDSA, proveSmile, proveERC20Transfer, runSmile, computeIdentity } from "./prover";
 import { setupCosmos, broadcastTx, checkTxStatus, ensureContractsRegistered } from "./cosmos";
 import { getBalances } from "./SmileTokenIndexer";
 
@@ -239,7 +239,7 @@ const signAndSend = async () => {
             balances: getBalances(),
             amount: 100,
             from: "faucet",
-            to: "daer", // TODO: this should be the user's address
+            to: computeIdentity(webAuthnValues.pub_key_x, webAuthnValues.pub_key_y)
         });
 
         ecdsaPromise.then(() => ecdsaPromiseDone.value = true);
