@@ -21,17 +21,31 @@ export type CairoArgs = {
 };
 
 export function serByteArray(arr: ByteArray): string {
-    if (arr.length > 31) {
-        throw new Error("ByteArray too long");
+    // Get quotient of euclidian division
+    const pending_word = arr.length/31>>0;
+    let words = [];
+    for (let i = 0; i < pending_word; i += 1) {
+        // Take each letter, encode as hex
+        words.push(BigInt(
+            "0x" +
+            arr.slice(0, 31*pending_word)
+            .split("")
+            .map((x) => x.charCodeAt(0).toString(16))
+            .join(""),
+        ).toString());
+        arr = arr.substring(31);
     }
-    // Take each letter, encode as hex
-    return `0 ${BigInt(
+    // Add the rest of arr to words
+    const pending_word_len = arr.length;
+    words.push(BigInt(
         "0x" +
-            arr
-                .split("")
-                .map((x) => x.charCodeAt(0).toString(16))
-                .join(""),
-    ).toString()} ${arr.length}`;
+        arr
+        .split("")
+        .map((x) => x.charCodeAt(0).toString(16))
+        .join(""),
+    ).toString());
+
+    return `${pending_word} ${words.join(" ")} ${pending_word_len}`;
 }
 
 export function hashBalance(balances: { name: ByteArray; amount: number }[]): string {

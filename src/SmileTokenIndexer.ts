@@ -16,7 +16,14 @@ export type BalanceChange = {
 };
 
 watchEffect(async () => {
-    const changes = state_changes.value.map((x) => GetErc20Output(x.messages.stateChanges[0].proof));
+    const changes: BalanceChange[] = state_changes.value
+    .map((transaction) => {
+        const transactionStateChange = transaction.messages.stateChanges
+        .filter((stateChange) => stateChange.contractName == "smile_token")
+        .map((stateChange) => GetErc20Output(stateChange.proof));
+        // There can only be one state change for one contract
+        return transactionStateChange[0]
+    });
     SmileTokenBalances.value = processChanges(changes);
 });
 
@@ -43,9 +50,9 @@ const GetErc20Output = (rawProof: Uint8Array): BalanceChange => {
     // Horrible
     const faucetPos = hexOutputs.search("06666175636574");
     // Parse length of other name
-    const nameLength = parseInt(hexOutputs.slice(faucetPos + 14, faucetPos + 16), 16);
+    const nameLength = parseInt(hexOutputs.slice(faucetPos + 14 + 2, faucetPos + 16 + 2), 16); // +2 is for the discriminant bytes for the Option
     // Parse name - first as a hex string
-    const nameHex = hexOutputs.slice(faucetPos + 16, faucetPos + 16 + nameLength * 2);
+    const nameHex = hexOutputs.slice(faucetPos + 16 + 2, faucetPos + 16 + 2 + nameLength * 2);
     // then as ascii
     let name = "";
     for (let i = 0; i < nameHex.length; i += 2) {
@@ -56,7 +63,7 @@ const GetErc20Output = (rawProof: Uint8Array): BalanceChange => {
         name += String.fromCharCode(charCode);
     }
     // Parse int
-    const intv = parseInt(hexOutputs.slice(faucetPos + 16 + nameLength * 2, faucetPos + 16 + nameLength * 2 + 2), 16);
+    const intv = parseInt(hexOutputs.slice(faucetPos + 16 + 4 + nameLength * 2, faucetPos + 16 + 4 + nameLength * 2 + 2), 16); // +4 is for the TWO discriminants bytes for the Option
     let val;
     const intStartPos = faucetPos + 16 + nameLength * 2 + 2;
     if (intv < 251) {

@@ -5,7 +5,7 @@ import { CairoArgs } from "./CairoRunner";
 
 import * as crypto from "crypto";
 
-const computeIdentity = (pub_key_x: number[], pub_key_y: number[]) => {
+export const computeIdentity = (pub_key_x: number[], pub_key_y: number[]) => {
     if (pub_key_x.length !== 32 || pub_key_y.length !== 32) {
         throw new Error("pub_key_x and pub_key_y size need to be 32bytes.");
     }
