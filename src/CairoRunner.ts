@@ -56,29 +56,30 @@ export function computeSmileArgs(args: CairoSmileArgs): string {
 }
 
 const sigmoid = (x: number) => {
-    return Math.exp(x) / (Math.exp(x) + 1)
+    return Math.exp(x) / (Math.exp(x) + 1);
 };
-  
+
 onmessage = function (e) {
     if (e.data[0] === "run-erc20") {
         console.log("ERC20 Worker started");
         setupErc20 = runErc20(computeArgs(e.data[1]));
     } else if (e.data[0] === "run-smile") {
         console.log("Smile Worker started");
-        setupSmile = runSmile(computeSmileArgs(e.data[1])).then(result => {
-
-            console.log(result)
-            console.log(result.output)
-
+        setupSmile = runSmile(computeSmileArgs(e.data[1])).then((result) => {
             // Get last parameter of the serialized HyleOutput struct
             const last = result.output.split(" ").reverse()[0];
 
-            // Result to be processed with a Sigmoid function, so far, it outputs something like 3.65 * 10^75 => too high)
-            const res = +last.split("]")[0];
-            
-            // Send the vibe result to the main thread
-            this.postMessage({...result, vibe: res});
-/*
+            // Process felt as a signed integer.
+            let res = BigInt(last.split("]")[0]);
+            // 2^128
+            if (res > 340282366920938463463374607431768211456n)
+                res = -(3618502788666131213697322783095070105623107215331596699973092056135872020481n - res);
+            // Avoid NaNs in exp
+            if (res > 10000000n) res = 10000000n;
+            if (res < -10000000n) res = -10000000n;
+
+            this.postMessage({ ...result, vibe: sigmoid(+res.toString() / 100000) });
+            /*
             console.log("Start generating proof");
 
             console.log(result)
@@ -120,9 +121,7 @@ async function runSmile(programInputs: string): any {
     await runnerInit();
     await proverInit();
 
-    console.log("Running with inputs: ", programInputs);
     return wasm_cairo_run(JSON.stringify(smileSierra), programInputs);
-
 }
 
 async function proveSmileRun() {

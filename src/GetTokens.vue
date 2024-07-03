@@ -15,9 +15,11 @@ const videoFeed = ref<HTMLVideoElement | null>(null);
 const screenshotOutput = ref<HTMLCanvasElement | null>(null);
 
 // Inner state of the screenshotting logic
-const screenshotData = ref<ImageData | null>(null);
+const screenshotData = ref<ImageBitmap | null>(null);
 const detectionTimer = ref<unknown | null>(null);
 const lastDetections = ref<faceApi.FaceDetection[]>([]);
+
+const hasDetection = computed(() => lastDetections.value.length > 0);
 
 const vibeCheckStatus = ref<"failed_vibe" | "success_vibe" | null>(null);
 
@@ -66,32 +68,6 @@ onMounted(async () => {
     await setupCosmos("http://localhost:26657");
     await ensureContractsRegistered();
 });
-
-const hasDetection = computed(() => lastDetections.value.length > 0);
-
-const zoomInOnBox = async (canvas, img, x, y, width, height, steps) => {
-    await new Promise((resolve) => {
-        let currentStep = 5;
-        const interval = setInterval(() => {
-            if (currentStep >= steps+1) {
-                clearInterval(interval);
-                resolve(null);
-                return;
-            }
-
-            const newWidth = canvas.width * (1 - currentStep / steps) + width * (currentStep / steps);
-            const newHeight = canvas.height * (1 - currentStep / steps) + height * (currentStep / steps);
-            const newX = x * (currentStep / steps);
-            const newY = y * (currentStep / steps);
-
-            const ctx = canvas.getContext("2d");
-            ctx.clearRect(0, 0, canvas.width, canvas.height);
-            ctx.drawImage(img, newX, newY, newWidth, newHeight, 0, 0, canvas.width, canvas.height);
-
-            currentStep++;
-        }, 400);
-    });
-}
 
 const doWebAuthn = async () => {
     status.value = "pre-authenticating";
@@ -144,24 +120,45 @@ const takeScreenshot = async () => {
     if (ctx) {
         ctx.drawImage(videoFeed.value!, 0, 0, canvas.width, canvas.height);
         screenshotData.value = await createImageBitmap(canvas);
-        
+
         const displaySize = { width: canvas.width, height: canvas.height }
         const resizedDetections = faceApi.resizeResults(lastDetections.value, displaySize)
         faceApi.draw.drawDetections(canvas, resizedDetections);
         status.value = "processing";
-        // TODO: we should cheat here and send the image to giza right away.
-        await zoomInOnBox(canvas, screenshotData.value!, resizedDetections[0].box.x, resizedDetections[0].box.y, resizedDetections[0].box.width, resizedDetections[0].box.height, 5);
 
-        const small = document.createElement("canvas");
-        const smallCtx = small.getContext("2d")!;
+        const zoomingPromise = zoomInOnBox(canvas, screenshotData.value!, resizedDetections[0].box.x, resizedDetections[0].box.y, resizedDetections[0].box.width, resizedDetections[0].box.height);
+        checkVibe(screenshotData.value!, zoomingPromise, resizedDetections[0].box.x, resizedDetections[0].box.y, resizedDetections[0].box.width, resizedDetections[0].box.height);
 
-        smallCtx.drawImage(canvas, 0, 0, 48, 48);
-
-        checkVibe(smallCtx.getImageData(0, 0, 48, 48));
+        await zoomingPromise;
     }
 };
 
-const imageToGrayScale  = (image: ImageData): Float32Array => {
+const zoomInOnBox = async (canvas: HTMLCanvasElement, img: ImageBitmap, x: number, y: number, width: number, height: number) => {
+    await new Promise((resolve) => {
+        const steps = 5;
+        let currentStep = 0;
+        const interval = setInterval(() => {
+            if (currentStep >= steps + 1) {
+                clearInterval(interval);
+                resolve(null);
+                return;
+            }
+
+            const newWidth = canvas.width * (1 - currentStep / steps) + width * (currentStep / steps);
+            const newHeight = canvas.height * (1 - currentStep / steps) + height * (currentStep / steps);
+            const newX = x * (currentStep / steps);
+            const newY = y * (currentStep / steps);
+
+            const ctx = canvas.getContext("2d")!;
+            ctx.clearRect(0, 0, canvas.width, canvas.height);
+            ctx.drawImage(img, newX, newY, newWidth, newHeight, 0, 0, canvas.width, canvas.height);
+
+            currentStep++;
+        }, 400);
+    });
+}
+
+const imageToGrayScale = (image: ImageData): Float32Array => {
     const data = image.data;
 
     // Create a flattened array for grayscale values
@@ -181,28 +178,37 @@ const imageToGrayScale  = (image: ImageData): Float32Array => {
     return grayscaleArray;
 }
 
-const checkVibe = async (image: ImageData) => {
+const checkVibe = async (image: ImageBitmap, zoomingPromise: Promise<any>, x: number, y: number, width: number, height: number) => {
     vibeCheckStatus.value = null;
     status.value = "checking_vibe";
 
-    const grayScale = imageToGrayScale(image);
+    const small = document.createElement("canvas");
+    const smallCtx = small.getContext("2d")!;
+    // Try to preserve the aspect ratio but center the splatting
+    const aspectRatio = width / height;
+    // Assume the face detection is a little "zoomed out", and it's better to zoom so crop
+    if (aspectRatio > 1) {
+        height = width / aspectRatio;
+    } else {
+        width = height * aspectRatio;
+    }
+    smallCtx.drawImage(image, x, y, width, height, 0, 0, 48, 48);
+    //document.body.appendChild(small); // Debug
+
+    const grayScale = imageToGrayScale(smallCtx.getImageData(0, 0, 48, 48));
 
     const isSmiling = await runSmile({
         identity: [], // not used in the model
         image: [...grayScale]
     });
-    
-    // TODO: do this for real
+    console.log("Smile probability:", isSmiling);
+    await zoomingPromise;
     if (isSmiling < 0.3) {
-        setTimeout(() => {
-            vibeCheckStatus.value = "failed_vibe";
-            status.value = "failed_vibe";
-        }, 1000);
+        vibeCheckStatus.value = "failed_vibe";
+        status.value = "failed_vibe";
     } else {
-        setTimeout(() => {
-            vibeCheckStatus.value = "success_vibe";
-            status.value = "success_vibe";
-        }, 1000);
+        vibeCheckStatus.value = "success_vibe";
+        status.value = "success_vibe";
     }
 }
 
