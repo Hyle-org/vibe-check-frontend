@@ -14,8 +14,8 @@ const computeIdentity = (pub_key_x: number[], pub_key_y: number[]) => {
     const result = hash.slice(-20);
     const hexResult = Array.from(result).map((byte) => byte.toString(16).padStart(2, "0"));
 
-    return hexResult.join("")+".ecdsa_secp256r1";
-}
+    return hexResult.join("") + ".ecdsa_secp256r1";
+};
 
 export const proveECDSA = async (webAuthnValues: Record<string, any>) => {
     const identity = computeIdentity(webAuthnValues.pub_key_x, webAuthnValues.pub_key_y);
@@ -49,6 +49,29 @@ export const proveECDSA = async (webAuthnValues: Record<string, any>) => {
     return JSON.stringify({
         publicInputs: proof.publicInputs,
         proof: Array.from(proof.proof),
+    });
+};
+
+export type CairoSmileArgs = {
+    identity: number[];
+    image: number[];
+};
+
+export const runSmile = async (args: CairoSmileArgs): Promise<number> => {
+    const worker = new Worker(new URL("./CairoRunner.ts", import.meta.url), {
+        type: "module",
+    });
+    return await new Promise((resolve, reject) => {
+        worker.onerror = (e) => {
+            console.error(e);
+            worker.terminate();
+            reject(e);
+        };
+        worker.onmessage = (e) => {
+            resolve(e.data.vibe);
+            worker.terminate();
+        };
+        worker.postMessage(["run-smile", args]);
     });
 };
 
