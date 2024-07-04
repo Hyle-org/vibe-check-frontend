@@ -138,6 +138,21 @@ async function runSmile(programInputs: string): any {
     return wasm_cairo_run(JSON.stringify(smileSierra), programInputs);
 }
 
+
+async function proveERC20Run() {
+    await setupErc20;
+    console.log("Proving ERC20...");
+    let erc20Proof = wasm_prove(
+        new Uint8Array(cairoERC20RunOutput.trace),
+        new Uint8Array(cairoERC20RunOutput.memory),
+        cairoERC20RunOutput.output,
+    );
+    return {
+        output: cairoERC20RunOutput.output,
+        proof: erc20Proof,
+    };
+}
+
 async function proveSmileRun() {
     await setupSmile;
     console.log("Proving Smile...");
