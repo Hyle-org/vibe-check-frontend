@@ -1,9 +1,17 @@
 import { BarretenbergBackend, CompiledCircuit } from "@noir-lang/backend_barretenberg";
 import { Noir } from "@noir-lang/noir_js";
 import webAuthnCircuit from "./webauthn.json";
-import { CairoArgs } from "./CairoRunner";
+import { CairoArgs } from "./CairoHash";
 
 import * as crypto from "crypto";
+
+// Circuit tools setup
+// Preloaded so the server starts downloading early and minimize latency.
+const backend = new BarretenbergBackend(webAuthnCircuit as CompiledCircuit, { threads: 4 });
+const noir = new Noir(webAuthnCircuit as CompiledCircuit, backend);
+noir.generateProof({}).catch((_) => {
+    import("@aztec/bb.js");
+});
 
 export const computeIdentity = (pub_key_x: number[], pub_key_y: number[]) => {
     if (pub_key_x.length !== 32 || pub_key_y.length !== 32) {
@@ -40,11 +48,7 @@ export const proveECDSA = async (webAuthnValues: Record<string, any>) => {
         },
     };
 
-    // Circuit tools setup
-    const backend = new BarretenbergBackend(webAuthnCircuit as CompiledCircuit, { threads: 4 });
-
     // Proving
-    const noir = new Noir(webAuthnCircuit as CompiledCircuit, backend);
     const proof = await noir.generateProof(noirInput);
     return JSON.stringify({
         publicInputs: proof.publicInputs,

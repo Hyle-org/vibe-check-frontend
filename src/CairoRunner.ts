@@ -3,57 +3,15 @@ import erc20Sierra from "./erc20-sierra.json";
 import smileSierra from "./smile-sierra.json";
 import runnerInit, { wasm_cairo_run } from "./runner-pkg/cairo_runner.js";
 import proverInit, { wasm_prove } from "./prover-pkg/cairo_verifier.js";
-import { ec } from "starknet";
 import { CairoSmileArgs } from "./prover.js";
 import JSZip from 'jszip';
+
+import { CairoArgs, hashBalance, serByteArray } from "./CairoHash";
 
 var cairoERC20RunOutput: any;
 var cairoSmileRunOutput: any;
 var setupErc20: Promise<any>;
 var setupSmile: Promise<any>;
-
-export type ByteArray = string;
-export type CairoArgs = {
-    balances: { name: ByteArray; amount: number }[];
-    amount: number;
-    from: ByteArray;
-    to: ByteArray;
-    // Recalculated: hash: string;
-};
-
-export function serByteArray(arr: ByteArray): string {
-    // Get quotient of euclidian division
-    const pending_word = arr.length/31>>0;
-    let words = [];
-    for (let i = 0; i < pending_word; i += 1) {
-        // Take each letter, encode as hex
-        words.push(BigInt(
-            "0x" +
-            arr.slice(0, 31*pending_word)
-            .split("")
-            .map((x) => x.charCodeAt(0).toString(16))
-            .join(""),
-        ).toString());
-        arr = arr.substring(31);
-    }
-    // Add the rest of arr to words
-    const pending_word_len = arr.length;
-    words.push(BigInt(
-        "0x" +
-        arr
-        .split("")
-        .map((x) => x.charCodeAt(0).toString(16))
-        .join(""),
-    ).toString());
-
-    return `${pending_word} ${words.join(" ")} ${pending_word_len}`;
-}
-
-export function hashBalance(balances: { name: ByteArray; amount: number }[]): string {
-    const asString = balances.map((x) => `${serByteArray(x.name)} ${x.amount}`).join(" ");
-
-    return BigInt(["1", ...asString.split(" ")].reduce((acc, x) => ec.starkCurve.pedersen(acc, BigInt(x)))).toString();
-}
 
 // exported for testing
 export function computeArgs(args: CairoArgs): string {
@@ -132,7 +90,7 @@ async function runErc20(programInputs: string) {
     cairoERC20RunOutput = wasm_cairo_run(JSON.stringify(erc20Sierra), programInputs);
 }
 
-async function runSmile(programInputs: string): any {
+async function runSmile(programInputs: string): Promise<any> {
     await runnerInit();
     await proverInit();
 
