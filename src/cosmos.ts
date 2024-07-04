@@ -8,6 +8,7 @@ import { TxRaw } from "cosmjs-types/cosmos/tx/v1beta1/tx";
 // https://github.com/cosmos/cosmjs/issues/640
 import { MsgExecuteStateChanges, MsgRegisterContract } from "./proto/tx.ts";
 import { hashBalance } from "./CairoHash";
+import { getNetworkApiUrl } from "./network.ts";
 
 const mnemonic =
     "surround miss nominee dream gap cross assault thank captain prosper drop duty group candy wealth weather scale put";
@@ -95,7 +96,7 @@ export async function checkTxStatus(hash: string) {
 }
 
 export async function ensureContractsRegistered() {
-    const checkExists = await fetch("http://localhost:1317/hyle/zktx/v1/contract/smile_token");
+    const checkExists = await fetch(`${getNetworkApiUrl()}/hyle/zktx/v1/contract/smile_token`);
     if ((await checkExists.json()).contract.program_id == "1Q==") {
         return;
     }

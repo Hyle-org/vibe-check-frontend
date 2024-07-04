@@ -163,6 +163,7 @@ export function base64ToUint8Array(base64: string): Uint8Array {
 import { ref } from "vue";
 import { MsgExecuteStateChanges, MsgRegisterContract } from "./proto/tx.ts";
 import { Tx as CosmosTx } from "cosmjs-types/cosmos/tx/v1beta1/tx";
+import { getNetworkWebsocketUrl } from "./network.ts";
 
 export function GetAllStateChanges() {
     let messages = ref(
@@ -173,7 +174,7 @@ export function GetAllStateChanges() {
         }[],
     );
 
-    JSONRpcClient.connect("ws://localhost:26657/websocket").then((client) => {
+    JSONRpcClient.connect(getNetworkWebsocketUrl()).then((client) => {
         client.searchAndSubscribe("message.action='/hyle.zktx.v1.MsgExecuteStateChanges'", (client) => {
             messages.value = [];
             const results = client.getResults();
@@ -204,7 +205,7 @@ export function GetAllContractRegistrations() {
     );
 
     (async () => {
-        const client = await JSONRpcClient.connect("ws://localhost:26657/websocket");
+        const client = await JSONRpcClient.connect(getNetworkWebsocketUrl());
         client.searchAndSubscribe("message.action='/hyle.zktx.v1.MsgRegisterContract'", (client) => {
             registerMsgs.value = [];
             const results = client.getResults();

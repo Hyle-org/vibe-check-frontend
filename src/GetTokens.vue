@@ -8,6 +8,7 @@ import { getBalances } from "./SmileTokenIndexer";
 
 import Logo from "./assets/Hyle_logo.svg";
 import extLink from "./assets/external-link-svgrepo-com.vue";
+import { getNetworkRpcUrl } from "./network";
 
 // These are references to HTML elements
 const canvasOutput = ref<HTMLCanvasElement | null>(null);
@@ -65,7 +66,7 @@ watchEffect(() => {
 onMounted(async () => {
     // For some reason this fails if done too early
     await faceApi.nets.tinyFaceDetector.loadFromUri("/models");
-    await setupCosmos("http://localhost:26657");
+    await setupCosmos(getNetworkRpcUrl());
     await ensureContractsRegistered();
 });
 

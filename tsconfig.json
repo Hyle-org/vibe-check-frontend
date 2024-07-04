@@ -1,9 +1,9 @@
 {
     "compilerOptions": {
-        "target": "esnext",
+        "target": "ESNext",
         "useDefineForClassFields": true,
-        "module": "preserve",
-        "lib": ["esnext", "DOM", "DOM.Iterable"],
+        "module": "ESNext",
+        "lib": ["ESNext", "DOM", "DOM.Iterable"],
         "skipLibCheck": true,
         "sourceMap": true,
         "outDir": "./dist",

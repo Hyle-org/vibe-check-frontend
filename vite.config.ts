@@ -3,7 +3,6 @@ import { nodePolyfills } from "vite-plugin-node-polyfills";
 import vue from "@vitejs/plugin-vue";
 import copy from "rollup-plugin-copy";
 
-import { nodeResolve } from "@rollup/plugin-node-resolve";
 import { visualizer } from "rollup-plugin-visualizer";
 import analyze from "rollup-plugin-analyzer";
 
@@ -23,21 +22,13 @@ const wasmContentTypePlugin = {
 
 // https://vitejs.dev/config/
 export default defineConfig({
-    /*
-    esbuild: {
-        target: "esnext",
-    },
-    optimizeDeps: {
-        esbuildOptions: {
-            target: "esnext",
-        },
-    },*/
     build: {
         sourcemap: false,
         minify: true,
         target: "esnext",
     },
     plugins: [
+        topLevelAwait(),
         vue(),
         copy({
             targets: [{ src: "node_modules/**/*.wasm", dest: "node_modules/.vite/deps" }],
@@ -54,7 +45,7 @@ export default defineConfig({
             },
             protocolImports: false,
         }),
-        visualizer(),
-        //analyze(),
+        // visualizer(),
+        // analyze(),
     ],
 });
