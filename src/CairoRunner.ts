@@ -7,6 +7,7 @@ import { CairoSmileArgs } from "./prover.js";
 import JSZip from 'jszip';
 
 import { CairoArgs, hashBalance, serByteArray } from "./CairoHash";
+import { getCairoProverUrl } from "./network.js";
 
 var cairoERC20RunOutput: any;
 var cairoSmileRunOutput: any;
@@ -120,7 +121,7 @@ async function proveERC20Run() {
         body: form
     };
 
-    let proveResponse = await fetch(`http://localhost:3000/prove`, requestOptions)
+    let proveResponse = await fetch(getCairoProverUrl()+"/prove", requestOptions)
         .catch(error => console.log("error", error));
 
     let erc20Proofb64 = await proveResponse.text();

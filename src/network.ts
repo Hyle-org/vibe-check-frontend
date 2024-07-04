@@ -20,3 +20,10 @@ export const getNetworkWebsocketUrl = () => {
         devnet: "wss://rpc.devnet.hyle.eu/websocket",
     }[network];
 };
+
+export const getCairoProverUrl = () => {
+    return {
+        localhost: "http://localhost:3000",
+        devnet: "https://vibe.hyle.eu/cairo-prover",
+    }[network];
+};
