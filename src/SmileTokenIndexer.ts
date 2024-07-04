@@ -48,42 +48,44 @@ const GetErc20Output = (rawProof: Uint8Array): BalanceChange => {
         .map((x) => x.toString(16).padStart(2, "0"))
         .join("");
     // Horrible
-    const faucetPos = hexOutputs.search("06666175636574");
-    // Parse length of other name
-    const nameLength = parseInt(hexOutputs.slice(faucetPos + 14 + 2, faucetPos + 16 + 2), 16); // +2 is for the discriminant bytes for the Option
-    // Parse name - first as a hex string
-    const nameHex = hexOutputs.slice(faucetPos + 16 + 2, faucetPos + 16 + 2 + nameLength * 2);
-    // then as ascii
-    let name = "";
-    for (let i = 0; i < nameHex.length; i += 2) {
-        const charCode = parseInt(nameHex.slice(i, i + 2), 16);
-        if (charCode === 0) {
-            break;
-        }
-        name += String.fromCharCode(charCode);
+    // This corresponds to "0 112568767309172 6" which is the cairo-ByteArray encoding of "faucet"
+    const faucetPos = hexOutputs.search("3020313132353638373637333039313732203620");
+    const programOutputLength = parseInt(hexOutputs.slice(faucetPos - 2, faucetPos), 16);
+    var serializeProgramOutput: any = '';
+    for (var i = 0; i < programOutputLength*2; i += 2) {
+        // console.log("i=", i, parseInt(hexOutputs.slice(faucetPos + i, faucetPos + i + 2), 16));
+        serializeProgramOutput += hex2a(hexOutputs.slice(faucetPos + i, faucetPos + i + 2));
     }
-    // Parse int
-    const intv = parseInt(hexOutputs.slice(faucetPos + 16 + 4 + nameLength * 2, faucetPos + 16 + 4 + nameLength * 2 + 2), 16); // +4 is for the TWO discriminants bytes for the Option
-    let val;
-    const intStartPos = faucetPos + 16 + nameLength * 2 + 2;
-    if (intv < 251) {
-        val = intv;
-    } else if (intv < 252) {
-        // parse as big endian u16
-        val =
-            parseInt(hexOutputs.slice(intStartPos, intStartPos + 2), 16) +
-            parseInt(hexOutputs.slice(intStartPos + 2, intStartPos + 4), 16) * 256;
-    } else {
-        // parse as big endian u32
-        val =
-            parseInt(hexOutputs.slice(intStartPos, intStartPos + 2), 16) +
-            parseInt(hexOutputs.slice(intStartPos + 2, intStartPos + 4), 16) * 256 +
-            parseInt(hexOutputs.slice(intStartPos + 4, intStartPos + 6), 16) * 256 * 256 +
-            parseInt(hexOutputs.slice(intStartPos + 6, intStartPos + 8), 16) * 256 * 256 * 256;
-    }
+    serializeProgramOutput = serializeProgramOutput.split(" ");
+
+    var [from, serializeProgramOutput] = deserialize_cairo_bytesarray(serializeProgramOutput);
+    var [to, serializeProgramOutput] = deserialize_cairo_bytesarray(serializeProgramOutput);
+    var amount = parseInt(serializeProgramOutput[0]);
+
     return {
-        from: "faucet",
-        to: name,
-        value: val,
+        from: from as string,
+        to: to as string,
+        value: amount,
     };
 };
+
+const deserialize_cairo_bytesarray = (data: string[]) => {
+    // let pending_word = data.shift();
+    let pending_word = parseInt(data.splice(0, 1)[0]);
+    let word_list = data.splice(0, pending_word + 1);
+    let _pending_word_len = parseInt(data.splice(0, 1)[0]);
+
+    let word: string = "";
+    for (let i = 0; i < word_list.length; i += 1) {
+        word += hex2a(BigInt(word_list[i]).toString(16));
+    }
+    return [word, data]
+}
+
+const hex2a = (hexx: number | string) => {
+    var hex = hexx.toString();//force conversion
+    var str = '';
+    for (var i = 0; i < hex.length; i += 2)
+        str += String.fromCharCode(parseInt(hex.substr(i, 2), 16));
+    return str;
+}
