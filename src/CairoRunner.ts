@@ -5,6 +5,7 @@ import runnerInit, { wasm_cairo_run } from "./runner-pkg/cairo_runner.js";
 import proverInit, { wasm_prove } from "./prover-pkg/cairo_verifier.js";
 import { ec } from "starknet";
 import { CairoSmileArgs } from "./prover.js";
+import JSZip from 'jszip';
 
 var cairoERC20RunOutput: any;
 var cairoSmileRunOutput: any;
@@ -142,27 +143,73 @@ async function runSmile(programInputs: string): any {
 async function proveERC20Run() {
     await setupErc20;
     console.log("Proving ERC20...");
-    let erc20Proof = wasm_prove(
-        new Uint8Array(cairoERC20RunOutput.trace),
-        new Uint8Array(cairoERC20RunOutput.memory),
-        cairoERC20RunOutput.output,
-    );
+    const form = new FormData();
+
+    const memoryZip = new JSZip();
+    memoryZip.file('memory', cairoERC20RunOutput.memory);
+    const memoryZipData = await memoryZip.generateAsync({ type: 'blob' });
+
+    const traceZip = new JSZip();
+    traceZip.file('trace', new Uint8Array(cairoERC20RunOutput.trace));
+    const traceZipData = await traceZip.generateAsync({ type: 'blob' });
+
+    form.append("memory", memoryZipData);
+    form.append("trace", traceZipData);
+    form.append("output", cairoERC20RunOutput.output);
+
+    const requestOptions: RequestInit = {
+        method: "POST",
+        body: form
+    };
+
+    let proveResponse = await fetch(`http://localhost:3000/prove`, requestOptions)
+        .catch(error => console.log("error", error));
+
+    let erc20Proofb64 = await proveResponse.text();
+    
     return {
         output: cairoERC20RunOutput.output,
-        proof: erc20Proof,
+        proof: base64ToArrayBuffer(erc20Proofb64),
     };
 }
 
 async function proveSmileRun() {
     await setupSmile;
     console.log("Proving Smile...");
-    let smileProof = wasm_prove(
-        new Uint8Array(cairoSmileRunOutput.trace),
-        new Uint8Array(cairoSmileRunOutput.memory),
-        cairoSmileRunOutput.output,
-    );
+    const form = new FormData();
+
+    const memoryZip = new JSZip();
+    memoryZip.file('memory', cairoSmileRunOutput.memory);
+    const memoryZipData = await memoryZip.generateAsync({ type: 'blob' });
+
+    const traceZip = new JSZip();
+    traceZip.file('trace', new Uint8Array(cairoSmileRunOutput.trace));
+    const traceZipData = await traceZip.generateAsync({ type: 'blob' });
+
+    form.append("memory", memoryZipData);
+    form.append("trace", traceZipData);
+    form.append("output", cairoSmileRunOutput.output);
+
+    const requestOptions: RequestInit = {
+        method: "POST",
+        body: form
+    };
+
+    let proveResponse = await fetch(`http://localhost:3000/prove`, requestOptions)
+        .catch(error => console.log("error", error));
+
+    let smileProofb64 = await proveResponse.text();
     return {
         output: cairoSmileRunOutput.output,
-        proof: smileProof,
+        proof: base64ToArrayBuffer(smileProofb64),
     };
+}
+
+function base64ToArrayBuffer(base64: string) {
+    var binaryString = atob(base64);
+    var bytes = new Uint8Array(binaryString.length);
+    for (var i = 0; i < binaryString.length; i++) {
+        bytes[i] = binaryString.charCodeAt(i);
+    }
+    return bytes.buffer;
 }
