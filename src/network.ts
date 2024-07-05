@@ -24,7 +24,7 @@ export const getNetworkWebsocketUrl = () => {
 export const getCairoProverUrl = () => {
     return {
         localhost: "http://localhost:3000",
-        devnet: "https://vibe.hyle.eu/cairo-prover",
+        devnet: "https://vibe.hyle.eu/cairoprover",
     }[network];
 };
 
