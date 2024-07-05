@@ -35,7 +35,7 @@ onmessage = function (e) {
     } else if (e.data[0] === "run-smile") {
         console.log("Smile Worker started");
         setupSmile = runSmile(computeSmileArgs(e.data[1]));
-        setupSmile.then((result) => postMessage(["smile-ran", result]));
+        setupSmile.then((result) => postMessage(["smile-run", result]));
     } else if (e.data[0] === "prove-erc20") {
         proveERC20Run().then((result) => {
             console.log("Worker job done");
