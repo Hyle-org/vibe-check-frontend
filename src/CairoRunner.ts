@@ -9,7 +9,7 @@ import { CairoArgs, CairoSmileArgs, hashBalance, serByteArray } from "./CairoHas
 import { getCairoProverUrl } from "./network.js";
 
 var cairoERC20RunOutput: any;
-export var cairoSmileRunOutput: any;
+var cairoSmileRunOutput: any;
 var setupErc20: Promise<any>;
 var setupSmile: Promise<any>;
 
