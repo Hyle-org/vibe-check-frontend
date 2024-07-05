@@ -1,9 +1,8 @@
 import { BarretenbergBackend, CompiledCircuit } from "@noir-lang/backend_barretenberg";
 import { Noir } from "@noir-lang/noir_js";
 import webAuthnCircuit from "./webauthn.json";
-import { CairoArgs } from "./CairoHash";
-
-import * as crypto from "crypto";
+import { CairoArgs, CairoSmileArgs } from "./CairoHash";
+import { webAuthnIdentity } from "./webauthn";
 
 // Circuit tools setup
 // Preloaded so the server starts downloading early and minimize latency.
@@ -13,20 +12,8 @@ noir.generateProof({}).catch((_) => {
     import("@aztec/bb.js");
 });
 
-export const computeIdentity = (pub_key_x: number[], pub_key_y: number[]) => {
-    if (pub_key_x.length !== 32 || pub_key_y.length !== 32) {
-        throw new Error("pub_key_x and pub_key_y size need to be 32bytes.");
-    }
-    const publicKey = Buffer.concat([Buffer.from(pub_key_x), Buffer.from(pub_key_y)]);
-    const hash = crypto.createHash("sha256").update(publicKey).digest();
-    const result = hash.slice(-20);
-    const hexResult = Array.from(result).map((byte) => byte.toString(16).padStart(2, "0"));
-
-    return hexResult.join("") + ".ecdsa_secp256r1";
-};
 
 export const proveECDSA = async (webAuthnValues: Record<string, any>) => {
-    const identity = computeIdentity(webAuthnValues.pub_key_x, webAuthnValues.pub_key_y);
     const noirInput = {
         // TODO: remove generic values
         version: 1,
@@ -35,7 +22,7 @@ export const proveECDSA = async (webAuthnValues: Record<string, any>) => {
         next_state_len: 4,
         next_state: [0, 0, 0, 0],
         identity_len: 56,
-        identity: identity,
+        identity: webAuthnIdentity,
         tx_hash_len: 43,
         tx_hash: webAuthnValues.challenge,
         program_outputs: {
@@ -53,29 +40,6 @@ export const proveECDSA = async (webAuthnValues: Record<string, any>) => {
     return JSON.stringify({
         publicInputs: proof.publicInputs,
         proof: Array.from(proof.proof),
-    });
-};
-
-export type CairoSmileArgs = {
-    identity: number[];
-    image: number[];
-};
-
-export const runSmile = async (args: CairoSmileArgs): Promise<number> => {
-    const worker = new Worker(new URL("./CairoRunner.ts", import.meta.url), {
-        type: "module",
-    });
-    return await new Promise((resolve, reject) => {
-        worker.onerror = (e) => {
-            console.error(e);
-            worker.terminate();
-            reject(e);
-        };
-        worker.onmessage = (e) => {
-            resolve(e.data.vibe);
-            worker.terminate();
-        };
-        worker.postMessage(["run-smile", args]);
     });
 };
 
@@ -98,7 +62,7 @@ export const proveERC20Transfer = async (args: CairoArgs): Promise<Uint8Array> =
     });
 };
 
-export const proveSmile = async (args: string) => {
+export const proveSmile = async (args: CairoSmileArgs): Promise<Uint8Array> => {
     const worker = new Worker(new URL("./CairoRunner.ts", import.meta.url), {
         type: "module",
     });
@@ -109,7 +73,7 @@ export const proveSmile = async (args: string) => {
             reject(e);
         };
         worker.onmessage = (e) => {
-            resolve(e);
+            resolve(e.data.proof);
             worker.terminate();
         };
         worker.postMessage(["run-smile", args]);
