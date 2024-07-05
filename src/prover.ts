@@ -2,7 +2,7 @@ import { BarretenbergBackend, CompiledCircuit } from "@noir-lang/backend_barrete
 import { Noir } from "@noir-lang/noir_js";
 import webAuthnCircuit from "./webauthn.json";
 import { CairoArgs, CairoSmileArgs } from "./CairoHash";
-import { webAuthnIdentity } from "./webauthn";
+import { getWebAuthnIdentity } from "./webauthn";
 
 // Circuit tools setup
 // Preloaded so the server starts downloading early and minimize latency.
@@ -22,7 +22,7 @@ export const proveECDSA = async (webAuthnValues: Record<string, any>) => {
         next_state_len: 4,
         next_state: [0, 0, 0, 0],
         identity_len: 56,
-        identity: webAuthnIdentity,
+        identity: getWebAuthnIdentity(),
         tx_hash_len: 43,
         tx_hash: webAuthnValues.challenge,
         program_outputs: {
