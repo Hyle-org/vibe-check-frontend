@@ -1,6 +1,7 @@
 import * as asn1js from "asn1js";
 import * as pkijs from "pkijs";
 import * as crypto from "crypto";
+import { getRpId } from "./network";
 
 function extractPublicKeyCoordinates(publicKeyInfo: ArrayBuffer): [x: Uint8Array, y: Uint8Array] {
     const asn1 = asn1js.fromBER(publicKeyInfo);
@@ -101,7 +102,7 @@ export const registerWebAuthnIfNeeded = async () => {
         },
         challenge: creationChallenge,
         pubKeyCredParams: [{ alg: -7, type: "public-key" }],
-        rp: { name: "Vibe Checker", id: "localhost" },
+        rp: { name: "Vibe Checker", id: getRpId() },
         timeout: 600000,
         user: { id: Uint8Array.from("myUserId", c => c.charCodeAt(0)), name: "jamiedoe", displayName: "Jamie Doe" },
     } as PublicKeyCredentialCreationOptions;
@@ -130,7 +131,7 @@ export const signChallengeWithWebAuthn = async (challenge: Uint8Array) => {
             { id: rawId, type: "public-key" }
         ],
         challenge: challenge,
-        rpId: "localhost",
+        rpId: getRpId(),
         attestation: "none",
         timeout: 600000,
         userVerification: "discouraged",
