@@ -27,3 +27,10 @@ export const getCairoProverUrl = () => {
         devnet: "https://vibe.hyle.eu/cairo-prover",
     }[network];
 };
+
+export const getRpId = () => {
+    return {
+        localhost: "localhost",
+        devnet: "vibe.hyle.eu",
+    }[network];
+};
