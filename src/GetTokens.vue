@@ -2,8 +2,7 @@
 import * as faceApi from "face-api.js";
 import { computed, nextTick, onMounted, ref, watchEffect } from "vue";
 import { needWebAuthnCredentials, registerWebAuthnIfNeeded, signChallengeWithWebAuthn, getWebAuthnIdentity } from "./webauthn";
-import { proveECDSA, proveSmile, proveERC20Transfer } from "./prover";
-import { computeSmileArgs, runSmile } from "./CairoRunner";
+import { proveECDSA, runSmile, proveSmile, proveERC20Transfer } from "./prover";
 import { setupCosmos, broadcastTx, checkTxStatus, ensureContractsRegistered } from "./cosmos";
 import { getBalances } from "./SmileTokenIndexer";
 
@@ -209,9 +208,9 @@ const checkVibe = async (image: ImageBitmap, zoomingPromise: Promise<any>, x: nu
         image: [...grayScale]
     };
 
-    let cairoSmileRunOutput = await runSmile(computeSmileArgs(dryRunSmileArgs));
+    let cairoSmileRunOutput = await runSmile(dryRunSmileArgs);
     // Get last parameter of the serialized HyleOutput struct
-    const last = cairoSmileRunOutput.output.split(" ").reverse()[0];
+    const last = cairoSmileRunOutput.split(" ").reverse()[0];
 
     // Process felt as a signed integer.
     let res = BigInt(last.split("]")[0]);
