@@ -69,13 +69,19 @@ async function proveERC20Run() {
     console.log("Proving ERC20...");
     const form = new FormData();
 
+    console.log(cairoERC20RunOutput);
+
     const memoryZip = new JSZip();
     memoryZip.file("memory", cairoERC20RunOutput.memory);
     const memoryZipData = await memoryZip.generateAsync({ type: "blob" });
 
+    console.log("ERC20 memory zipped");
+
     const traceZip = new JSZip();
     traceZip.file("trace", new Uint8Array(cairoERC20RunOutput.trace));
     const traceZipData = await traceZip.generateAsync({ type: "blob" });
+
+    console.log("ERC20 trace zipped");
 
     form.append("memory", memoryZipData);
     form.append("trace", traceZipData);
@@ -103,13 +109,19 @@ async function proveSmileRun() {
     console.log("Proving Smile...");
     const form = new FormData();
 
+    console.log(cairoSmileRunOutput);
+
     const memoryZip = new JSZip();
     memoryZip.file("memory", cairoSmileRunOutput.memory);
     const memoryZipData = await memoryZip.generateAsync({ type: "blob" });
 
+    console.log("ERC20 memory zipped");
+
     const traceZip = new JSZip();
     traceZip.file("trace", new Uint8Array(cairoSmileRunOutput.trace));
     const traceZipData = await traceZip.generateAsync({ type: "blob" });
+
+    console.log("ERC20 trace zipped");
 
     form.append("memory", memoryZipData);
     form.append("trace", traceZipData);
