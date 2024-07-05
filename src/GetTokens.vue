@@ -3,14 +3,13 @@ import * as faceApi from "face-api.js";
 import { computed, nextTick, onMounted, ref, watchEffect } from "vue";
 import { needWebAuthnCredentials, registerWebAuthnIfNeeded, signChallengeWithWebAuthn, webAuthnIdentity } from "./webauthn";
 import { proveECDSA, proveSmile, proveERC20Transfer } from "./prover";
-import { cairoSmileRunOutput, computeSmileArgs, runSmile } from "./CairoRunner";
+import { computeSmileArgs, runSmile } from "./CairoRunner";
 import { setupCosmos, broadcastTx, checkTxStatus, ensureContractsRegistered } from "./cosmos";
 import { getBalances } from "./SmileTokenIndexer";
 
 import Logo from "./assets/Hyle_logo.svg";
 import extLink from "./assets/external-link-svgrepo-com.vue";
 import { getNetworkRpcUrl } from "./network";
-import { CairoSmileArgs } from "./CairoHash";
 
 // These are references to HTML elements
 const canvasOutput = ref<HTMLCanvasElement | null>(null);
@@ -205,12 +204,12 @@ const checkVibe = async (image: ImageBitmap, zoomingPromise: Promise<any>, x: nu
 
     grayScale = imageToGrayScale(smallCtx.getImageData(0, 0, 48, 48));
 
-    var smileArgs = {
+    var dryRunSmileArgs = {
         identity: "DRYRUN", // not used in the model
         image: [...grayScale]
     };
 
-    await runSmile(computeSmileArgs(smileArgs));
+    let cairoSmileRunOutput = await runSmile(computeSmileArgs(dryRunSmileArgs));
     // Get last parameter of the serialized HyleOutput struct
     const last = cairoSmileRunOutput.output.split(" ").reverse()[0];
 
@@ -224,7 +223,6 @@ const checkVibe = async (image: ImageBitmap, zoomingPromise: Promise<any>, x: nu
     if (res < -10000000n) res = -10000000n;
 
     const isSmiling = sigmoid(+res.toString() / 100000);
-    console.log(isSmiling);
 
     console.log("Smile probability:", isSmiling);
     await zoomingPromise;
