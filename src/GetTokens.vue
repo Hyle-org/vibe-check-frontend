@@ -1,7 +1,7 @@
 <script setup lang="ts">
 import * as faceApi from "face-api.js";
 import { computed, nextTick, onMounted, ref, watchEffect } from "vue";
-import { needWebAuthnCredentials, registerWebAuthnIfNeeded, signChallengeWithWebAuthn, webAuthnIdentity } from "./webauthn";
+import { needWebAuthnCredentials, registerWebAuthnIfNeeded, signChallengeWithWebAuthn, getWebAuthnIdentity } from "./webauthn";
 import { proveECDSA, proveSmile, proveERC20Transfer } from "./prover";
 import { computeSmileArgs, runSmile } from "./CairoRunner";
 import { setupCosmos, broadcastTx, checkTxStatus, ensureContractsRegistered } from "./cosmos";
@@ -249,24 +249,26 @@ const signAndSend = async () => {
     smilePromiseDone.value = false;
     erc20PromiseDone.value = false;
     status.value = "proving";
+    const identity = getWebAuthnIdentity();
 
     try {
         // Start locally proving that we are who we claim to be by signing the transaction hash
-        // TODO: this is currently a random challenge
-        const webAuthnValues = await signChallengeWithWebAuthn();
-        const ecdsaPromise = proveECDSA(webAuthnValues);
         // Send the proof of smile to Giza or something
         const smilePromise = proveSmile({
-        identity: webAuthnIdentity,
-        image: [...grayScale]
-    });
+            identity: identity,
+            image: [...grayScale]
+        });
         // Locally or backend prove an erc20 transfer
         const erc20Promise = proveERC20Transfer({
             balances: getBalances(),
             amount: 100,
             from: "faucet",
-            to: webAuthnIdentity,
+            to: identity,
         });
+
+        const challenge = Uint8Array.from("0123456789abcdef0123456789abcdef", c => c.charCodeAt(0));
+        const webAuthnValues = await signChallengeWithWebAuthn(challenge);
+        const ecdsaPromise = proveECDSA(webAuthnValues);
 
         ecdsaPromise.then(() => ecdsaPromiseDone.value = true);
         smilePromise.then(() => smilePromiseDone.value = true);

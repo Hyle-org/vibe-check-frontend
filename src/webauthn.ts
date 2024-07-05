@@ -69,9 +69,8 @@ function padRightWithZeros(input: ArrayBufferLike): Uint8Array {
     return paddedArray;
 }
 
-// Challenge should be 16bytes long
 // https://www.w3.org/TR/webauthn-2/#sctn-cryptographic-challenges
-var challenge = Uint8Array.from("0123456789abcdef0123456789abcdef", c => c.charCodeAt(0));
+var creationChallenge = Uint8Array.from("0123456789abcdef0123456789abcdef", c => c.charCodeAt(0));
 
 export const needWebAuthnCredentials = () => {
     try {
@@ -100,7 +99,7 @@ export const registerWebAuthnIfNeeded = async () => {
             requireResidentKey: false,
             residentKey: "discouraged",
         },
-        challenge: challenge,
+        challenge: creationChallenge,
         pubKeyCredParams: [{ alg: -7, type: "public-key" }],
         rp: { name: "Vibe Checker", id: "localhost" },
         timeout: 600000,
@@ -119,7 +118,7 @@ export const registerWebAuthnIfNeeded = async () => {
     }));
 }
 
-export const signChallengeWithWebAuthn = async () => {
+export const signChallengeWithWebAuthn = async (challenge: Uint8Array) => {
     const locallyStoredId = window.localStorage.getItem("credentials")!;
     const rawId = Uint8Array.from(JSON.parse(locallyStoredId).raw_id as Array<number>);
     const publicKey = Uint8Array.from(JSON.parse(locallyStoredId).public_key as Array<number>);
@@ -156,8 +155,6 @@ export const signChallengeWithWebAuthn = async () => {
     var extracted_challenge = clientDataJSON.slice(36, 36 + 43);
     var client_data_json_len = clientDataJSON.byteLength;
 
-    computeIdentity(Array.from(new Uint8Array(pub_key_x)), Array.from(new Uint8Array(pub_key_y)));
-
     return {
         authenticator_data: Array.from(new Uint8Array(authenticatorData)),
         client_data_json_len: client_data_json_len,
@@ -169,16 +166,16 @@ export const signChallengeWithWebAuthn = async () => {
     };
 }
 
-export var webAuthnIdentity: string;
+export const getWebAuthnIdentity = () => {
 
-export const computeIdentity = (pub_key_x: number[], pub_key_y: number[]) => {
-    if (pub_key_x.length !== 32 || pub_key_y.length !== 32) {
-        throw new Error("pub_key_x and pub_key_y size need to be 32bytes.");
-    }
+    const locallyStoredId = window.localStorage.getItem("credentials")!;
+    let pubKey = Uint8Array.from(JSON.parse(locallyStoredId).public_key as Array<number>);
+    var [pub_key_x, pub_key_y] = extractPublicKeyCoordinates(pubKey);
+
     const publicKey = Buffer.concat([Buffer.from(pub_key_x), Buffer.from(pub_key_y)]);
     const hash = crypto.createHash("sha256").update(publicKey).digest();
     const result = hash.slice(-20);
     const hexResult = Array.from(result).map((byte) => byte.toString(16).padStart(2, "0"));
 
-    webAuthnIdentity = hexResult.join("") + ".ecdsa_secp256r1";
+    return hexResult.join("") + ".ecdsa_secp256r1";
 };
