@@ -120,7 +120,7 @@ async function proveSmileRun() {
         body: form,
     };
 
-    let proveResponse = await fetch(`http://localhost:3000/prove`, requestOptions).catch((error) =>
+    let proveResponse = await fetch(getCairoProverUrl() + "/prove", requestOptions).catch((error) =>
         console.log("error", error),
     );
 
