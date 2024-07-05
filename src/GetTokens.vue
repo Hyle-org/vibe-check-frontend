@@ -1,14 +1,16 @@
 <script setup lang="ts">
 import * as faceApi from "face-api.js";
 import { computed, nextTick, onMounted, ref, watchEffect } from "vue";
-import { needWebAuthnCredentials, registerWebAuthnIfNeeded, signChallengeWithWebAuthn } from "./webauthn";
-import { proveECDSA, proveSmile, proveERC20Transfer, runSmile, computeIdentity } from "./prover";
+import { needWebAuthnCredentials, registerWebAuthnIfNeeded, signChallengeWithWebAuthn, webAuthnIdentity } from "./webauthn";
+import { proveECDSA, proveSmile, proveERC20Transfer } from "./prover";
+import { cairoSmileRunOutput, computeSmileArgs, runSmile } from "./CairoRunner";
 import { setupCosmos, broadcastTx, checkTxStatus, ensureContractsRegistered } from "./cosmos";
 import { getBalances } from "./SmileTokenIndexer";
 
 import Logo from "./assets/Hyle_logo.svg";
 import extLink from "./assets/external-link-svgrepo-com.vue";
 import { getNetworkRpcUrl } from "./network";
+import { CairoSmileArgs } from "./CairoHash";
 
 // These are references to HTML elements
 const canvasOutput = ref<HTMLCanvasElement | null>(null);
@@ -23,6 +25,7 @@ const lastDetections = ref<faceApi.FaceDetection[]>([]);
 const hasDetection = computed(() => lastDetections.value.length > 0);
 
 const vibeCheckStatus = ref<"failed_vibe" | "success_vibe" | null>(null);
+var grayScale: Float32Array;
 
 const ecdsaPromiseDone = ref<boolean>(false);
 const smilePromiseDone = ref<boolean>(false);
@@ -179,6 +182,10 @@ const imageToGrayScale = (image: ImageData): Float32Array => {
     return grayscaleArray;
 }
 
+const sigmoid = (x: number) => {
+    return Math.exp(x) / (Math.exp(x) + 1);
+};
+
 const checkVibe = async (image: ImageBitmap, zoomingPromise: Promise<any>, x: number, y: number, width: number, height: number) => {
     vibeCheckStatus.value = null;
     status.value = "checking_vibe";
@@ -196,12 +203,29 @@ const checkVibe = async (image: ImageBitmap, zoomingPromise: Promise<any>, x: nu
     smallCtx.drawImage(image, x, y, width, height, 0, 0, 48, 48);
     //document.body.appendChild(small); // Debug
 
-    const grayScale = imageToGrayScale(smallCtx.getImageData(0, 0, 48, 48));
+    grayScale = imageToGrayScale(smallCtx.getImageData(0, 0, 48, 48));
 
-    const isSmiling = await runSmile({
-        identity: [], // not used in the model
+    var smileArgs = {
+        identity: "DRYRUN", // not used in the model
         image: [...grayScale]
-    });
+    };
+
+    await runSmile(computeSmileArgs(smileArgs));
+    // Get last parameter of the serialized HyleOutput struct
+    const last = cairoSmileRunOutput.output.split(" ").reverse()[0];
+
+    // Process felt as a signed integer.
+    let res = BigInt(last.split("]")[0]);
+    // 2^128
+    if (res > 340282366920938463463374607431768211456n)
+        res = -(3618502788666131213697322783095070105623107215331596699973092056135872020481n - res);
+    // Avoid NaNs in exp
+    if (res > 10000000n) res = 10000000n;
+    if (res < -10000000n) res = -10000000n;
+
+    const isSmiling = sigmoid(+res.toString() / 100000);
+    console.log(isSmiling);
+
     console.log("Smile probability:", isSmiling);
     await zoomingPromise;
     if (isSmiling < 0.3) {
@@ -234,13 +258,16 @@ const signAndSend = async () => {
         const webAuthnValues = await signChallengeWithWebAuthn();
         const ecdsaPromise = proveECDSA(webAuthnValues);
         // Send the proof of smile to Giza or something
-        const smilePromise = ecdsaPromise//proveSmile();
+        const smilePromise = proveSmile({
+        identity: webAuthnIdentity,
+        image: [...grayScale]
+    });
         // Locally or backend prove an erc20 transfer
         const erc20Promise = proveERC20Transfer({
             balances: getBalances(),
             amount: 100,
             from: "faucet",
-            to: computeIdentity(webAuthnValues.pub_key_x, webAuthnValues.pub_key_y)
+            to: webAuthnIdentity,
         });
 
         ecdsaPromise.then(() => ecdsaPromiseDone.value = true);

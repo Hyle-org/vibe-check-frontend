@@ -9,6 +9,11 @@ export type CairoArgs = {
     // Recalculated: hash: string;
 };
 
+export type CairoSmileArgs = {
+    identity: string;
+    image: number[];
+};
+
 export function serByteArray(arr: ByteArray): string {
     // Get quotient of euclidian division
     const pending_word = (arr.length / 31) >> 0;
