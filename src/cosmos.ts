@@ -45,7 +45,10 @@ function uint8ArrayToBase64(array: Uint8Array): string {
     return btoa(result);
 }
 
-export async function broadcastTx(ecdsaProof: string, smileProof: Uint8Array, erc20Proof: Uint8Array) {
+export async function broadcastTx(ecdsaProof: string, smileProof: any, erc20Proof: Uint8Array) {
+    console.log(ecdsaProof)
+    console.log(smileProof)
+    console.log(erc20Proof)
     const msgAny = {
         typeUrl: "/hyle.zktx.v1.MsgExecuteStateChanges",
         value: {
@@ -58,7 +61,7 @@ export async function broadcastTx(ecdsaProof: string, smileProof: Uint8Array, er
                     proof: uint8ArrayToBase64(erc20Proof),
                 },{
                     contractName: "smile",
-                    proof: uint8ArrayToBase64(smileProof),
+                    proof: uint8ArrayToBase64(smileProof.proof),
                 },
             ],
         },
