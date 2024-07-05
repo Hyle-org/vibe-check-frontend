@@ -3,7 +3,7 @@ import erc20Sierra from "./erc20-sierra.json";
 import smileSierra from "./smile-sierra.json";
 import runnerInit, { wasm_cairo_run } from "./runner-pkg/cairo_runner.js";
 import proverInit, { wasm_prove } from "./prover-pkg/cairo_verifier.js";
-import JSZip from 'jszip';
+import JSZip from "jszip";
 
 import { CairoArgs, CairoSmileArgs, hashBalance, serByteArray } from "./CairoHash";
 import { getCairoProverUrl } from "./network.js";
@@ -35,6 +35,7 @@ onmessage = function (e) {
     } else if (e.data[0] === "run-smile") {
         console.log("Smile Worker started");
         setupSmile = runSmile(computeSmileArgs(e.data[1]));
+        setupSmile.then((result) => postMessage(["smile-ran", result]));
     } else if (e.data[0] === "prove-erc20") {
         proveERC20Run().then((result) => {
             console.log("Worker job done");
@@ -43,7 +44,7 @@ onmessage = function (e) {
     } else if (e.data[0] === "prove-smile") {
         proveSmileRun().then((result) => {
             console.log("Worker job done");
-            postMessage(result);
+            postMessage(["smile-proof", result]);
         });
     }
 };
@@ -60,9 +61,8 @@ export async function runSmile(programInputs: string): Promise<any> {
     await proverInit();
 
     cairoSmileRunOutput = wasm_cairo_run(JSON.stringify(smileSierra), programInputs);
-    return cairoSmileRunOutput
+    return cairoSmileRunOutput;
 }
-
 
 async function proveERC20Run() {
     await setupErc20;
@@ -70,12 +70,12 @@ async function proveERC20Run() {
     const form = new FormData();
 
     const memoryZip = new JSZip();
-    memoryZip.file('memory', cairoERC20RunOutput.memory);
-    const memoryZipData = await memoryZip.generateAsync({ type: 'blob' });
+    memoryZip.file("memory", cairoERC20RunOutput.memory);
+    const memoryZipData = await memoryZip.generateAsync({ type: "blob" });
 
     const traceZip = new JSZip();
-    traceZip.file('trace', new Uint8Array(cairoERC20RunOutput.trace));
-    const traceZipData = await traceZip.generateAsync({ type: 'blob' });
+    traceZip.file("trace", new Uint8Array(cairoERC20RunOutput.trace));
+    const traceZipData = await traceZip.generateAsync({ type: "blob" });
 
     form.append("memory", memoryZipData);
     form.append("trace", traceZipData);
@@ -83,14 +83,15 @@ async function proveERC20Run() {
 
     const requestOptions: RequestInit = {
         method: "POST",
-        body: form
+        body: form,
     };
 
-    let proveResponse = await fetch(getCairoProverUrl()+"/prove", requestOptions)
-        .catch(error => console.log("error", error));
+    let proveResponse = await fetch(getCairoProverUrl() + "/prove", requestOptions).catch((error) =>
+        console.log("error", error),
+    );
 
     let erc20Proofb64 = await proveResponse.text();
-    
+
     return {
         output: cairoERC20RunOutput.output,
         proof: base64ToArrayBuffer(erc20Proofb64),
@@ -103,12 +104,12 @@ async function proveSmileRun() {
     const form = new FormData();
 
     const memoryZip = new JSZip();
-    memoryZip.file('memory', cairoSmileRunOutput.memory);
-    const memoryZipData = await memoryZip.generateAsync({ type: 'blob' });
+    memoryZip.file("memory", cairoSmileRunOutput.memory);
+    const memoryZipData = await memoryZip.generateAsync({ type: "blob" });
 
     const traceZip = new JSZip();
-    traceZip.file('trace', new Uint8Array(cairoSmileRunOutput.trace));
-    const traceZipData = await traceZip.generateAsync({ type: 'blob' });
+    traceZip.file("trace", new Uint8Array(cairoSmileRunOutput.trace));
+    const traceZipData = await traceZip.generateAsync({ type: "blob" });
 
     form.append("memory", memoryZipData);
     form.append("trace", traceZipData);
@@ -116,11 +117,12 @@ async function proveSmileRun() {
 
     const requestOptions: RequestInit = {
         method: "POST",
-        body: form
+        body: form,
     };
 
-    let proveResponse = await fetch(`http://localhost:3000/prove`, requestOptions)
-        .catch(error => console.log("error", error));
+    let proveResponse = await fetch(`http://localhost:3000/prove`, requestOptions).catch((error) =>
+        console.log("error", error),
+    );
 
     let smileProofb64 = await proveResponse.text();
     return {
