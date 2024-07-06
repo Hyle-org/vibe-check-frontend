@@ -350,7 +350,7 @@ const vTriggerScroll = {
                 </div>
                 <div v-show="status !== 'authenticated' && status !== 'failed_camera'" class="flex justify-center">
                     <div class="rounded overflow-hidden mirror relative">
-                        <video ref="videoFeed" autoplay></video>
+                        <video ref="videoFeed" autoplay playsinline muted class="w-full"></video>
                         <canvas class="absolute top-0" ref="canvasOutput"></canvas>
                     </div>
                 </div>
