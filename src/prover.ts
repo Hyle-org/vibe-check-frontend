@@ -33,7 +33,6 @@ export const proveECDSA = async (webAuthnValues: Record<string, any>) => {
             pub_key_y: webAuthnValues.pub_key_y,
         },
     };
-    console.log(noirInput);
     // Proving
     const proof = await noir.generateProof(noirInput);
     return JSON.stringify({
