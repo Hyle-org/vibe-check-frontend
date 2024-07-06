@@ -92,7 +92,7 @@ export const proveSmile = async (args: CairoSmileArgs): Promise<Uint8Array> => {
         };
         worker.onmessage = (e) => {
             if (e.data[0] === "smile-proof") {
-                resolve(e.data[1]);
+                resolve(e.data[1].proof);
                 worker.terminate();
             }
         };

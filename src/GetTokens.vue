@@ -95,6 +95,7 @@ const doWebAuthn = async () => {
 const activateCamera = async () => {
     try {
         const stream = await navigator.mediaDevices.getUserMedia({ video: true, audio: false });
+        await nextTick();
         videoFeed.value!.srcObject = stream;
         videoFeed.value!.play();
         nextTick(() => status.value = "camera_playing");
