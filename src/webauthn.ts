@@ -35,13 +35,13 @@ function extractSignature(signature: ArrayBuffer): Uint8Array {
     let s = sBlock.valueBlock.valueHexView;
 
     // Convert both to bigint
-    let big_r = BigInt(`0x${r.reduce((str, byte) => str + byte.toString(16).padStart(2, '0'), '')}`);
-    let big_s = BigInt(`0x${s.reduce((str, byte) => str + byte.toString(16).padStart(2, '0'), '')}`);
+    let big_r = BigInt(`0x${r.reduce((str, byte) => str + byte.toString(16).padStart(2, "0"), "")}`);
+    let big_s = BigInt(`0x${s.reduce((str, byte) => str + byte.toString(16).padStart(2, "0"), "")}`);
 
     // ECDSA malleability fix: both (r, s) and (r, -s mod n) are valid signatures
     // To prevent this, we can enforce s to be in the lower half of the curve
     if (big_s > 0xffffffff00000000ffffffffffffffffbce6faada7179e84f3b9cac2fc632551n / 2n) {
-        big_s = (0xffffffff00000000ffffffffffffffffbce6faada7179e84f3b9cac2fc632551n - big_s)
+        big_s = 0xffffffff00000000ffffffffffffffffbce6faada7179e84f3b9cac2fc632551n - big_s;
     }
 
     // Convert back to a uint8array of exactly 32 bytes and concatenate
@@ -71,23 +71,25 @@ function padRightWithZeros(input: ArrayBufferLike): Uint8Array {
 }
 
 // https://www.w3.org/TR/webauthn-2/#sctn-cryptographic-challenges
-var creationChallenge = Uint8Array.from("0123456789abcdef0123456789abcdef", c => c.charCodeAt(0));
+var creationChallenge = Uint8Array.from("0123456789abcdef0123456789abcdef", (c) => c.charCodeAt(0));
 
 export const needWebAuthnCredentials = () => {
     try {
         const locallyStoredId = JSON.parse(window.localStorage.getItem("credentials")!);
         console.log("locallyStoredId", locallyStoredId);
-        return !Uint8Array.from(locallyStoredId.raw_id as Array<number>)
+        return !Uint8Array.from(locallyStoredId.raw_id as Array<number>);
     } catch (_) {
         return true;
     }
-}
+};
 
 export const registerWebAuthnIfNeeded = async () => {
-    const storedId = (() => { try {
-        const locallyStoredId = window.localStorage.getItem("credentials");
-        return locallyStoredId ? Uint8Array.from(JSON.parse(locallyStoredId).raw_id as Array<number>) : null;
-    } catch (_) {}})();
+    const storedId = (() => {
+        try {
+            const locallyStoredId = window.localStorage.getItem("credentials");
+            return locallyStoredId ? Uint8Array.from(JSON.parse(locallyStoredId).raw_id as Array<number>) : null;
+        } catch (_) {}
+    })();
 
     if (storedId) {
         return;
@@ -96,7 +98,7 @@ export const registerWebAuthnIfNeeded = async () => {
     const publicKey = {
         attestation: "none",
         authenticatorSelection: {
-            authenticatorAttachment: "cross-platform",
+            authenticatorAttachment: "platform",
             requireResidentKey: false,
             residentKey: "discouraged",
         },
@@ -104,32 +106,33 @@ export const registerWebAuthnIfNeeded = async () => {
         pubKeyCredParams: [{ alg: -7, type: "public-key" }],
         rp: { name: "Vibe Checker", id: getRpId() },
         timeout: 600000,
-        user: { id: Uint8Array.from("myUserId", c => c.charCodeAt(0)), name: "jamiedoe", displayName: "Jamie Doe" },
+        user: { id: Uint8Array.from("myUserId", (c) => c.charCodeAt(0)), name: "jamiedoe", displayName: "Jamie Doe" },
     } as PublicKeyCredentialCreationOptions;
 
-    var credential = (await navigator.credentials.create({ publicKey: publicKey }) as PublicKeyCredential);
+    var credential = (await navigator.credentials.create({ publicKey: publicKey })) as PublicKeyCredential;
     var attestation = credential.response as AuthenticatorAttestationResponse;
 
     // Apparently no need to store() for public key credentials?
 
     //navigator.credentials.store(credential);
-    window.localStorage.setItem("credentials", JSON.stringify({
-        raw_id: Array.from(new Uint8Array(credential.rawId)),
-        public_key: Array.from(new Uint8Array(attestation.getPublicKey()!))
-    }));
-}
+    window.localStorage.setItem(
+        "credentials",
+        JSON.stringify({
+            raw_id: Array.from(new Uint8Array(credential.rawId)),
+            public_key: Array.from(new Uint8Array(attestation.getPublicKey()!)),
+        }),
+    );
+};
 
 export const signChallengeWithWebAuthn = async (challenge: Uint8Array) => {
     const locallyStoredId = window.localStorage.getItem("credentials")!;
     const rawId = Uint8Array.from(JSON.parse(locallyStoredId).raw_id as Array<number>);
     const publicKey = Uint8Array.from(JSON.parse(locallyStoredId).public_key as Array<number>);
-    
+
     // We assume that the above cannot fail or there is a logic error in the code
 
     const getRequest = {
-        allowCredentials: [
-            { id: rawId, type: "public-key" }
-        ],
+        allowCredentials: [{ id: rawId, type: "public-key" }],
         challenge: challenge,
         rpId: getRpId(),
         attestation: "none",
@@ -137,9 +140,10 @@ export const signChallengeWithWebAuthn = async (challenge: Uint8Array) => {
         userVerification: "discouraged",
     } as PublicKeyCredentialRequestOptions;
 
-    var assertion = (await navigator.credentials.get({ publicKey: getRequest }) as PublicKeyCredential).response as AuthenticatorAssertionResponse;
+    var assertion = ((await navigator.credentials.get({ publicKey: getRequest })) as PublicKeyCredential)
+        .response as AuthenticatorAssertionResponse;
 
-    assertion.userHandle
+    assertion.userHandle;
     // Extract values from webauthn interactions
     var pubKey = publicKey;
     var signature = assertion.signature;
@@ -163,12 +167,11 @@ export const signChallengeWithWebAuthn = async (challenge: Uint8Array) => {
         signature: Array.from(new Uint8Array(extracted_signature)),
         challenge: Array.from(new Uint8Array(extracted_challenge)),
         pub_key_x: Array.from(new Uint8Array(pub_key_x)),
-        pub_key_y: Array.from(new Uint8Array(pub_key_y))
+        pub_key_y: Array.from(new Uint8Array(pub_key_y)),
     };
-}
+};
 
 export const getWebAuthnIdentity = () => {
-
     const locallyStoredId = window.localStorage.getItem("credentials")!;
     let pubKey = Uint8Array.from(JSON.parse(locallyStoredId).public_key as Array<number>);
     var [pub_key_x, pub_key_y] = extractPublicKeyCoordinates(pubKey);
