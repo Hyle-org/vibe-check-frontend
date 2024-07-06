@@ -24,7 +24,7 @@ export function serByteArray(arr: ByteArray): string {
             BigInt(
                 "0x" +
                     arr
-                        .slice(0, 31 * pending_word)
+                        .slice(0, 31)
                         .split("")
                         .map((x) => x.charCodeAt(0).toString(16))
                         .join(""),
