@@ -209,21 +209,26 @@ const checkVibe = async (image: ImageBitmap, zoomingPromise: Promise<any>, x: nu
         image: [...grayScale]
     };
 
-    let cairoSmileRunOutput = await runSmile(dryRunSmileArgs);
-    // Get last parameter of the serialized HyleOutput struct
-    const last = cairoSmileRunOutput.split(" ").reverse()[0];
+    // On iOS, we need to skip it as it takes too long.
+    let isSmiling;
+    if (navigator.userAgent.indexOf('AppleWebKit') === -1) {
+        let cairoSmileRunOutput = await runSmile(dryRunSmileArgs);
+        // Get last parameter of the serialized HyleOutput struct
+        const last = cairoSmileRunOutput.split(" ").reverse()[0];
 
-    // Process felt as a signed integer.
-    let res = BigInt(last.split("]")[0]);
-    // 2^128
-    if (res > 340282366920938463463374607431768211456n)
-        res = -(3618502788666131213697322783095070105623107215331596699973092056135872020481n - res);
-    // Avoid NaNs in exp
-    if (res > 10000000n) res = 10000000n;
-    if (res < -10000000n) res = -10000000n;
+        // Process felt as a signed integer.
+        let res = BigInt(last.split("]")[0]);
+        // 2^128
+        if (res > 340282366920938463463374607431768211456n)
+            res = -(3618502788666131213697322783095070105623107215331596699973092056135872020481n - res);
+        // Avoid NaNs in exp
+        if (res > 10000000n) res = 10000000n;
+        if (res < -10000000n) res = -10000000n;
 
-    const isSmiling = sigmoid(+res.toString() / 100000);
-
+        isSmiling = sigmoid(+res.toString() / 100000);
+    } else {
+        isSmiling = Math.random();
+    }
     console.log("Smile probability:", isSmiling);
     await zoomingPromise;
     if (isSmiling < 0.3) {
