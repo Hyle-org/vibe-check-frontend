@@ -2,6 +2,7 @@ import * as asn1js from "asn1js";
 import * as pkijs from "pkijs";
 import * as crypto from "crypto";
 import { getRpId } from "./network";
+import { isMobile } from 'mobile-device-detect';
 
 function extractPublicKeyCoordinates(publicKeyInfo: ArrayBuffer): [x: Uint8Array, y: Uint8Array] {
     const asn1 = asn1js.fromBER(publicKeyInfo);
@@ -94,11 +95,10 @@ export const registerWebAuthnIfNeeded = async () => {
     if (storedId) {
         return;
     }
-    // TODO: adapt publicKey for devnet
-    const publicKey = {
+
+    var publicKey = {
         attestation: "none",
         authenticatorSelection: {
-            authenticatorAttachment: "platform",
             requireResidentKey: false,
             residentKey: "discouraged",
         },
@@ -109,6 +109,9 @@ export const registerWebAuthnIfNeeded = async () => {
         user: { id: Uint8Array.from("myUserId", (c) => c.charCodeAt(0)), name: "jamiedoe", displayName: "Jamie Doe" },
     } as PublicKeyCredentialCreationOptions;
 
+    if (isMobile) {
+        publicKey.authenticatorSelection.authenticatorAttachment = "platform";
+    }
     var credential = (await navigator.credentials.create({ publicKey: publicKey })) as PublicKeyCredential;
     var attestation = credential.response as AuthenticatorAttestationResponse;
 
