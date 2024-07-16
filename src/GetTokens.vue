@@ -6,6 +6,8 @@ import { proveECDSA, runSmile, proveSmile, proveERC20Transfer } from "./prover";
 import { setupCosmos, broadcastTx, checkTxStatus, ensureContractsRegistered } from "./cosmos";
 import { getBalances } from "./SmileTokenIndexer";
 
+import * as crypto from "crypto";
+
 import Logo from "./assets/Hyle_logo.svg";
 import extLink from "./assets/external-link-svgrepo-com.vue";
 import { getNetworkRpcUrl } from "./network";
@@ -270,20 +272,27 @@ const signAndSend = async () => {
             from: "faucet",
             to: identity,
         });
+        let erc20Proof = await erc20Promise;
+        let smileProof = await smilePromise;
 
-        const challenge = Uint8Array.from("0123456789abcdef0123456789abcdef", c => c.charCodeAt(0));
-        const webAuthnValues = await signChallengeWithWebAuthn(challenge);
+        var challenge = crypto.createHash("sha256");
+        challenge.update(identity);
+
+        erc20PromiseDone.value = true
+        smilePromiseDone.value = true
+        challenge.update(erc20Proof);
+        challenge.update(smileProof);
+
+        const webAuthnValues = await signChallengeWithWebAuthn(challenge.digest());
         const ecdsaPromise = proveECDSA(webAuthnValues);
 
         ecdsaPromise.then(() => ecdsaPromiseDone.value = true);
-        smilePromise.then(() => smilePromiseDone.value = true);
-        erc20Promise.then(() => erc20PromiseDone.value = true);
 
         // Send the transaction
         const resp = await broadcastTx(
             await ecdsaPromise,
-            await smilePromise,
-            await erc20Promise,
+            smileProof,
+            erc20Proof,
         );
         // Switch to waiter view
         status.value = "checking_tx";
