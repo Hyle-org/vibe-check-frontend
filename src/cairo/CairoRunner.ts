@@ -1,12 +1,12 @@
 // Cairo Wasm
-import erc20Sierra from "./erc20-sierra.json?raw";
-import smileSierra from "./smile-sierra.json?raw";
-import runnerInit, { wasm_cairo_run } from "./runner-pkg/cairo_runner.js";
-import proverInit, { wasm_prove } from "./prover-pkg/cairo_verifier.js";
+import erc20Sierra from "./programs/erc20-sierra.json";
+import smileSierra from "./programs/smile-sierra.json";
+import runnerInit, { wasm_cairo_run } from "./runner-pkg/cairo_runner";
+import proverInit from "./prover-pkg/cairo_verifier";
 import JSZip from "jszip";
 
-import { CairoArgs, CairoSmileArgs, hashBalance, serByteArray } from "./CairoHash";
-import { getCairoProverUrl } from "./network.js";
+import { CairoArgs, CairoSmileArgs, hashBalance, serByteArray } from "./CairoHash.js";
+import { getCairoProverUrl } from "../network";
 
 var cairoERC20RunOutput: any;
 var cairoSmileRunOutput: any;
@@ -53,14 +53,14 @@ async function runErc20(programInputs: string) {
     await runnerInit();
     await proverInit();
 
-    cairoERC20RunOutput = wasm_cairo_run(erc20Sierra, programInputs);
+    cairoERC20RunOutput = wasm_cairo_run(JSON.stringify(erc20Sierra), programInputs);
 }
 
 export async function runSmile(programInputs: string): Promise<any> {
     await runnerInit();
     await proverInit();
 
-    cairoSmileRunOutput = wasm_cairo_run(smileSierra, programInputs);
+    cairoSmileRunOutput = wasm_cairo_run(JSON.stringify(smileSierra), programInputs);
     return cairoSmileRunOutput;
 }
 

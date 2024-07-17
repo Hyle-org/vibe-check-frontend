@@ -7,7 +7,7 @@ import { TxRaw } from "cosmjs-types/cosmos/tx/v1beta1/tx";
 // for the types you care about. How this is done should be documented, but is not yet:
 // https://github.com/cosmos/cosmjs/issues/640
 import { MsgExecuteStateChanges, MsgRegisterContract } from "./proto/tx.ts";
-import { hashBalance } from "./CairoHash";
+import { hashBalance } from "./cairo/CairoHash";
 import { getNetworkApiUrl } from "./network.ts";
 
 const mnemonic =
@@ -27,7 +27,7 @@ export async function setupCosmos(address: string) {
             ["/hyle.zktx.v1.MsgExecuteStateChanges", MsgExecuteStateChanges],
             ["/hyle.zktx.v1.MsgRegisterContract", MsgRegisterContract],
         ]),
-    });
+    }).catch(e => console.log(e));
 }
 
 function uint8ArrayToBase64(array: Uint8Array): string {
