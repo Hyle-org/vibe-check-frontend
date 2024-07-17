@@ -2,7 +2,8 @@
 import * as faceApi from "face-api.js";
 import { computed, nextTick, onMounted, ref, watchEffect } from "vue";
 import { needWebAuthnCredentials, registerWebAuthnIfNeeded, signChallengeWithWebAuthn, getWebAuthnIdentity } from "./webauthn";
-import { proveECDSA, runSmile, proveSmile, proveERC20Transfer } from "./prover";
+import { runSmile, proveSmile, proveERC20Transfer } from "./cairo/prover";
+import { proveECDSA } from "./noir/prover";
 import { setupCosmos, broadcastTx, checkTxStatus, ensureContractsRegistered } from "./cosmos";
 import { getBalances } from "./SmileTokenIndexer";
 

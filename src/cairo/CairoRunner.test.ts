@@ -1,9 +1,9 @@
 import { expect, test } from "bun:test";
 import runnerInit, { wasm_cairo_run } from "./runner-pkg/cairo_runner.js";
-import erc20Sierra from "./erc20-sierra.json";
-import smileSierra from "./smile-sierra.json";
-import { hashBalance } from "./CairoHash";
-import { computeErc20Args } from "./CairoRunner";
+import erc20Sierra from "./programs/erc20-sierra.json";
+import smileSierra from "./programs/smile-sierra.json";
+import { hashBalance } from "./CairoHash.js";
+import { computeErc20Args } from "./CairoRunner.js";
 
 const erc20Args = {
     balances: [
@@ -79,7 +79,7 @@ test("CairoERC20Runner", async () => {
     );
 });
 
-import proverInit, { wasm_prove } from "./prover-pkg/cairo_verifier.js";
+import proverInit, { wasm_prove } from "./cairo-backend/prover-pkg/cairo_verifier.js";
 test("CairoSmileRunner", async () => {
     await runnerInit();
     const { trace, memory, output } = wasm_cairo_run(JSON.stringify(smileSierra), smileArgs);
